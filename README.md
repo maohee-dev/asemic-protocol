@@ -1,3 +1,4 @@
+```markdown
 <!-- ===== Asemic Protocol ===== -->
 <h1 align="center">
   Asemic Protocol 🌌
@@ -8,11 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="https://your-username.github.io/asemic-protocol">
+  <a href="https://asemic-protocol.vercel.app">
     <img src="https://img.shields.io/badge/🪐-Launch%20Live%20Demo-0a0a0a?style=for-the-badge&labelColor=000" alt="Live Demo">
   </a>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License">
-  <img src="https://img.shields.io/github/languages/top/your-username/asemic-protocol?style=flat-square" alt="Top language">
+  <img src="https://img.shields.io/github/languages/top/maohee-dev/asemic-protocol?style=flat-square" alt="Top language">
 </p>
 
 ---
@@ -47,7 +48,7 @@ Stay idle and the system enters introspection: debug logs, cryptic verses, and v
 No build tools, no dependencies.
 
 ```bash
-git clone https://github.com/your-username/asemic-protocol.git
+git clone https://github.com/maohee-dev/asemic-protocol.git
 cd asemic-protocol
 ```
 
