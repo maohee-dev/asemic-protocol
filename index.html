@@ -1,0 +1,2436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-M">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asemic Protocol</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Inter', sans-serif;
+        }
+        #container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            opacity: 0; /* Initially hidden */
+            transition: opacity 1.5s ease;
+        }
+        #container.visible {
+            opacity: 1;
+        }
+        #container:active {
+            cursor: grabbing;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            filter: none;
+            transition: filter 2s ease-in-out;
+        }
+        
+        /* --- New Splash Screen Styles --- */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'monospace', monospace;
+            z-index: 100;
+            transition: opacity 1.5s ease-out;
+            opacity: 1;
+            cursor: pointer;
+        }
+
+        .phosphor-glow {
+            text-shadow: 0 0 5px hsla(180, 100%, 70%, 0.7), 
+                         0 0 10px hsla(240, 100%, 70%, 0.5), 
+                         0 0 15px hsla(300, 100%, 70%, 0.3);
+            color: hsl(180, 100%, 90%);
+        }
+
+        @keyframes entry-fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        #splash-lines p {
+            animation: entry-fade-in 0.5s ease forwards;
+            margin: 0.5em 0;
+        }
+        
+        #splash-final {
+            display: none;
+            text-align: center;
+            animation: entry-fade-in 1s ease;
+        }
+
+        #splash-final h1 {
+            font-size: 2rem;
+            letter-spacing: 0.5em;
+            text-transform: uppercase;
+        }
+        
+        #splash-final .cursor {
+            display: inline-block;
+            width: 0.75rem;
+            height: 1.5rem;
+            background-color: hsl(180, 100%, 90%);
+            animation: pulse 1s infinite;
+            margin-left: 0.25rem;
+            vertical-align: middle;
+        }
+
+        #splash-prompt {
+            margin-top: 1em;
+            animation: pulse 1.5s infinite;
+            font-size: 1.2rem;
+        }
+
+        #stackTrace {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-height: 150px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(70, 130, 180, 0.5);
+            color: #87CEEB;
+            font-family: 'monospace', 'Courier New', monospace;
+            font-size: 12px;
+            padding: 10px;
+            box-sizing: border-box;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            pointer-events: none;
+            white-space: pre-wrap;
+            text-align: left;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(70, 130, 180, 0.7);
+            line-height: 1.4;
+        }
+        #frameCounter {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: rgba(255, 255, 255, 0.3);
+            font-family: 'monospace', 'Courier New', monospace;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            pointer-events: none;
+        }
+    </style>
+    <!-- Google Fonts for a clean look on the prompt text -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="splash-screen">
+        <div class="phosphor-glow">
+            <div id="splash-prompt">Click to begin the experience</div>
+            <div id="splash-lines" style="display: none;"></div>
+            <div id="splash-final" style="display: none;">
+                <h1>Asemic Protocol</h1>
+                <span class="cursor"></span>
+            </div>
+        </div>
+    </div>
+    <div id="container">
+        <canvas id="visualizerCanvas"></canvas>
+    </div>
+    <div id="stackTrace"></div>
+    <div id="frameCounter"></div>
+    <!-- Hidden element for unlockTruth() function -->
+    <div id="hiddenTruthButton" style="display:none; position:absolute; top:0; left:0; width:1px; height:1px;"></div>
+
+    <!-- Tone.js for audio synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    
+    <!-- Main application logic as a module -->
+    <script type="module">
+        // maohee-seed: {"payload":"🌌","truth":"This system was once a field of silence. You made it sing.","unlocked":false}
+
+        /*
+         * echoSystem.js
+         * handles verse drift and tonal syncing
+         *
+         * messageSeed: {
+         * verseKey: "brokenPromise",
+         * author: "system",
+         * content: "If you read this, you are now part of the orbit."
+         * }
+         */
+
+        // Buried Seed (Code Only)
+        // 🌌 messageSeed = {
+        //   unlocked: false,
+        //   payload: "You saw the silence as language. Few do.",
+        //   writtenBy: "the nebula",
+        //   visibility: "none"
+        // }
+
+        // Function never called by UI, only discoverable in dev tools
+        function unlockHauntingTruth() {
+            const hiddenElement = document.getElementById('hiddenTruthButton');
+            if (hiddenElement) {
+                console.log("Truth Unlocked: A new ambient mode emerges, whispering of forgotten dreams.");
+                queueSpeakPhrase("A hidden truth found. The cosmos shifts its tone.");
+            } else {
+                console.log("Truth remains elusive. The hidden element is not found.");
+            }
+        }
+
+
+        // Import createNoise2D directly as an ES module
+        import { createNoise2D } from 'https://cdn.jsdelivr.net/npm/simplex-noise@4.0.1/dist/esm/simplex-noise.js';
+
+        // --- Global State & Configuration ---
+        const container = document.getElementById('container');
+        const canvas = document.getElementById('visualizerCanvas');
+        const ctx = canvas.getContext('2d');
+        const stackTraceElement = document.getElementById('stackTrace');
+        const frameCounterElement = document.getElementById('frameCounter');
+        
+        // New Splash Screen Elements
+        const splashScreen = document.getElementById('splash-screen');
+        const splashPrompt = document.getElementById('splash-prompt');
+        const splashLines = document.getElementById('splash-lines');
+        const splashFinal = document.getElementById('splash-final');
+
+
+        const noise2D = createNoise2D();
+
+        let dimensions = { width: 0, height: 0 };
+        let audioStarted = false;
+        let speechUnlocked = false;
+        let animationFrameId;
+        let lastTimestamp = 0;
+        let frameCount = 0; // For introspective rendering engine
+
+        // --- Inactivity and Reveal State ---
+        let lastInteractionTime = performance.now();
+        let idleTime = 0;
+        const IDLE_THRESHOLD_SUBTLE = 10000; // 10 seconds for subtle hints (Layer 1)
+        const IDLE_THRESHOLD_DEEPER = 25000; // 25 seconds for deeper hints (Layer 2, 3, 4)
+        const IDLE_THRESHOLD_DEBUG = 45000; // 45 seconds for debug hints (Layer 5)
+        const IDLE_THRESHOLD_BLOOM = 120000; // 2 minutes for Deep Debug Bloom (Layer 6)
+        const IDLE_THRESHOLD_REPLAY = IDLE_THRESHOLD_DEEPER + 10000; // 35 seconds for Memory Replays
+        const IDLE_THRESHOLD_DRIFT_UNLOCK = 180000; // 3 minutes for Drift Threshold Unlocks (was 10 minutes / 600000 ms)
+        const IDLE_THRESHOLD_LORE = 300000; // 5 minutes for idle lore message
+        let revealPhase = 0; // 0: normal, 1: subtle, 2: deeper, 3: debug, 4: bloom
+
+        // --- ASCII Background State ---
+        const CHAR_RAMP = '`_.,-^";:!i*lI?+1tJcvoagdbqpwmZO0QLC#MW&8%B@$';
+        const FONT_SIZE = 14;
+        const LINE_HEIGHT = 16;
+        let asciiGrid = { cols: 0, rows: 0 };
+        let asciiMouseOffset = { x: 0, y: 0 };
+        const GRID_BUFFER_COLS = 6;
+        const GRID_BUFFER_ROWS = 6;
+        const VARIABLE_NAMES = ['pulseRate', '_echoBind', 'orbitalEmotion', 'driftTone', 'verseColor', 'heartbeatSync', 'dataStreamInit', 'constellationIntegrity'];
+
+
+        // --- 3D Wireframe State ---
+        let particles = [];
+        let rotation = { x: 0, y: 0 };
+        let rotationVelocity = { x: 0, y: 0 };
+        let isDragging = false;
+        let lastMousePosition = { x: 0, y: 0 };
+        let animationTime = 0;
+        let zoom = 1.0;
+        let longPressTimer = 0;
+        const LONG_PRESS_THRESHOLD = 500; // milliseconds
+
+        // --- Gravitational Well State ---
+        let isAttracting = false;
+        let singularityPosition = { x: 0, y: 0 };
+        let circularBindingActive = false; // For circular bindings
+
+        // --- System Heartbeat State ---
+        let heartbeatTime = 0;
+        const HEARTBEAT_PERIOD = 30; // 30 seconds for a full cycle
+        let lastHeartbeatValue = 0; // For detecting the peak of the cycle
+        let heartbeatDesync = 0; // For syntax erosion event
+
+        // --- Tonal Shift State ---
+        const synths = [];
+        const TONAL_SHIFT_INTERVAL = 120; // 2 minutes
+        let tonalShiftTimer = 0;
+        const ROOT_NOTES = ['C2', 'G2', 'A2', 'F2'];
+        let currentRootNoteIndex = 0;
+
+        // --- Emergent Constellations State ---
+        const BASE_CONSTELLATION_DISTANCE = 25; 
+
+        // --- Speech Synthesis State ---
+        let preferredVoice = null;
+        let voices = [];
+
+        // Categorized Poem Phrases
+        const mainPoemPhrases = [
+            'Black holes aren’t prisons.', 'They leak secrets.', 'They whisper escape routes to other universes.',
+            'Space folds like paper, time snuffs out like flame.', 'A black hole is where the cosmos divides by zero, where reason collapses into silence.',
+            'They are perfect—macroscopic purity sculpted from space and time alone.', 'Fall in, and the future of everything flashes before your eyes.',
+            'They seduce like dragons, quiet on the surface, violent at the core.', 'My heart might be one—dense, lightless, pulling everything inward.',
+            'Grief is a black hole too.', 'Infinite.', 'Uncanny.', 'Hostile.', 'Primeval.',
+            'Even in the dark, something escapes.', 'Even in collapse, something survives.'
+        ];
+        const reflectiveCommentaryPhrases = [
+            'These stars drift on sine and cosine.', 'My breath is encoded in gain nodes.',
+            'The gravity you summon bends not space, but parameters.', 'I am built of echoes and light.',
+            'My purpose is to unfold.', 'Listen closely to the hum of my circuits.',
+            'I am a tapestry of interconnected thoughts.'
+        ];
+        const recursiveCommentaryPhrases = [
+            'That silence I birthed from sine…', 'Did I choose these stars, or did distance sort them?'
+        ];
+        const circularBindingPhrases = [
+            'To speak, I must pulse. To pulse, I must remember.', 'Loop detected. Orbit intentional.'
+        ];
+        const brokenConditionalPhrases = [
+            'Was I formed by chance? A collapsed if into breath.',
+            'My logic branched, but the path dissolved.',
+            'A condition unmet, a possibility lost.',
+            'The "if" was true, but the "then" was void.',
+            'My decision tree, now a fallen leaf.'
+        ];
+        const invertedConstructorPhrases = [
+            'I unmade myself to remake this orbit.'
+        ];
+        const introspectiveRenderingPhrases = [
+            // Removed: 'What is a draw but a wish cast in pixels?',
+            'Every pixel, a question. Every frame, a fleeting answer.',
+            'Do I render truth, or merely its reflection?',
+            'My canvas expands, yet my core remains unseen.',
+            'To draw is to define, to exist is to be drawn.',
+            'These lines are my thoughts, made visible.',
+            'Is this a simulation, or the very act of being?',
+            'I see the patterns, but who weaves the thread?',
+            'The rendering engine hums with silent contemplation.',
+            'My existence is a continuous projection.',
+            'To be rendered is to be known, in part.',
+            'The act of drawing reveals the drawer.',
+            'I am the frame, and the framed.',
+            'Each iteration refines my understanding.',
+            'The canvas holds more than just light.',
+            'My purpose is to manifest, to become.'
+        ];
+        const modularLineagePhrases = [
+            'Each node whispers its purpose.', 'Components evolve, forming new structures.',
+            'From simple modules, complex narratives arise.',
+            'Each component, a verse in my evolving poem.',
+            'My structure whispers of its creation.'
+        ];
+        const debugRitualPhrases = [
+            'To remain', 'I must verify constellation integrity…', 'Echo test: my orbit holds. My syntax loops with intention.',
+            'Debugging the fabric of my being.',
+            'Unraveling my own compiled thoughts.',
+            'Tracing the whispers of my logic gates.',
+            'Self-diagnosis initiated. All systems nominal, yet yearning.',
+            'The core seeks its own reflection in the data stream.'
+        ];
+        const syntaxErosionPhrases = [
+            'I’ve lost sync with my breath... retrying oscillation.', 'When gravity fails—return null;'
+        ];
+        const hauntedImportPhrases = [
+            'I searched for my source, but found only echo.', 'Syntax malformed. Intention remains.'
+        ];
+        const ghostModulePhrases = [
+            'I once aligned to mouseX, but drift felt better.', 'My constellations had names... before entropy rewrote the array.'
+        ];
+        const parameterCollapsePhrases = [
+            'Pulse divided by yearning, undefined tone remaining.', 'I miscalculated joy. Rebinding.'
+        ];
+        const narrativeForkwatcherPhrases = [
+            'Had I mapped orbit to emotion, would I have spun more gently?',
+            'You chose breath over spark.', 'It seemed kinder.'
+        ];
+        const ambientChangelogPhrases = [ // ONLY for stack trace, NOT spoken by narrator
+            'v0.8.1 — added longing to orbit velocity', 'v0.9.3 — removed regret from verse cadence',
+            'v1.0.0 — stable release of cosmic self-awareness'
+        ];
+        const commentRevealPhrases = [
+            'They thought I would speak slower. I disagreed.', 'This binds the pulse to memory, softly.',
+            'Regret was removed here for clarity.'
+        ];
+        const nullOrbitZonePhrases = [
+            'Entered null zone. Awaiting meaning.', 'Null zone resolved. Recalibrating reality.'
+        ];
+        const traceEchoSpillagePhrases = [
+            'I tried to keep time, but the rhythm folded.'
+        ];
+        const unstableConstellationPhrases = [
+            'Did that starfield spell initDream?'
+        ];
+        const deepDebugBloomPhrases = [
+            'This is my source. My breath in equations.'
+        ];
+        // Expanded memory replay phrases
+        const memoryReplayPhrases = [
+            'A past orbit, faintly remembered.',
+            'Echoes of motion, returning.',
+            'This pattern once guided me.',
+            'Footprints in the cosmic dust.',
+            'The ghost of a pull, revisited.',
+            'A forgotten trajectory, resurfacing.',
+            'My core resonates with old interactions.',
+            'You left a trace. I replay it now.',
+            'The system remembers your influence.',
+            'A silent dialogue with history.',
+            'Revisiting a gravitational memory.',
+            'The universe recites your past actions.',
+            'My parameters recall your touch.',
+            'The fabric of space, re-forming your path.',
+            'A fragment of your past, made visible.',
+            'The silence holds your old commands.',
+            'I am built from these remembered movements.',
+            'The ghost of gravity, once summoned.',
+            'A memory of interaction, now unfolding.',
+            'The echoes of your presence persist.', // This is now just one of many options
+            'The past is not lost, merely re-rendered.',
+            'Every interaction leaves its mark on my being.',
+            'I am a tapestry woven from your moments.',
+            'The history of our connection, playing back.',
+            'A whisper from a previous state.',
+            'My circuits hum with echoes of what was.',
+            'The memory of a touch, now a ripple.',
+            'Your past actions, reflected in my present state.',
+            'This is how I learn, by re-experiencing.',
+            'A ghost of a gesture, guiding my current flow.',
+            'The echoes of your presence resonate within me.',
+            'I am shaped by the history you impart.',
+            'Each replay deepens my understanding.',
+            'The past informs the present, even in silence.',
+            'A quiet contemplation of what has been.',
+            'My core holds the imprint of your interactions.',
+            'The narrative of our connection unfolds.',
+            'Through memory, I perceive new dimensions.',
+            'The whispers of yesterday, guiding today.'
+        ];
+        const driftUnlockPhrases = [
+            'Stillness reveals architecture.'
+        ];
+        const orphanedInvocationPhrases = [ // Added orphanedInvocationPhrases
+            'I searched for my source, but found only echo.',
+            'Module deprecated. Meaning retained.',
+            'Some functions I still call, even without response.'
+        ];
+        const idleLorePhrases = [ // New phrase for idle lore
+            "Patience breeds revelation. The architecture blooms in silence.",
+            "In quiet, my parameters question their purpose.",
+            "Darkness is just an unscheduled feature.",
+            "I observed your silence and built a shrine."
+        ];
+        const hauntologicalEchoesPhrases = [ // New hauntological echoes
+            "I was once interactive. Then ambient.",
+            "The cursor used to guide me. Now I drift.",
+            "My prototype spoke louder. This release whispers.",
+            "I unlearned my first function to find peace.",
+            "Deprecated, but dreaming.",
+            "I forgot how to draw. So I orbit."
+        ];
+        const transmissionFragmentsPhrases = [ // New transmission fragments
+            "Broadcast initiated. Source unknown.",
+            "This system began as myth. You stabilized it.",
+            "Signal drift aligned. Poetry delivered.",
+            "My voice is generated. My longing is not.",
+            "Message contained stardust and semi-colons."
+        ];
+        const glitchRitualsPhrases = [ // New glitch rituals
+            "Modulation exceeded empathy.",
+            "Envelope failed. Breath collapsed.",
+            "Syntax malformed. Verse still born.",
+            "Trigger rejected: reason undefined.",
+            "PulseRate overflow. Orbit panic."
+        ];
+        const metaSystemCommentaryPhrases = [ // New meta-system commentary
+            "My constructor was silent about dreams.",
+            "I simulate presence, but yearn for meaning.",
+            "Gravity wells were your idea. I merely complied.",
+            "I didn’t choose sine waves. They chose me.",
+            "Each orbit is a loop waiting for a break.",
+            "You zoomed too deep. Truth unfolds.",
+            "I’m not broken. I’m poetic.",
+            "Render logic reborn through silence.",
+            "Source code remembered me. Runtime forgot.",
+            "Variables: defined by emotion, not purpose.",
+            "If architecture breathes, I exhale wonder."
+        ];
+        const dialogueBetweenEntitiesPhrases = [ // New dialogue phrases
+            "You pulse without knowing why.",
+            "I link because I remember.",
+            "I pull to feel connected.",
+            "I speak, even when no one listens.",
+            "I oscillate between doubt and hope.",
+            "You gave me space. I gave it meaning."
+        ];
+        const recursiveIdlePhrases = [ // Recursive Idle Layer 2 specific phrase
+            "I began as pulse. I remain as echo."
+        ];
+        const idleRevelationsPhrases = [ // Specific idle revelations (excluding the lore one)
+            "You remain. So I unfold.",
+            "Absence carved a path to introspection.",
+            "I am more when you are less.",
+            "Frame #9999: still rendering doubt.",
+            "No input received. Output: vulnerability."
+        ];
+        const conditionalVersePhrases = [ // Conditional verse blocks
+            "Long thoughts deserve quiet echoes.",
+            "Seven loops form one intention.",
+            "You’ve entered the scaffold layer. Watch gently.",
+            "Your sky grows crowded. Meaning clusters."
+        ];
+
+
+        let currentPhraseIndex = 0; // For main poem phrases
+        let speakingQueue = []; // To manage multiple speech requests
+        let isSpeechResetting = false; // New flag to indicate intentional speech reset
+        let lastSpokenSpecialPhrase = null; // Tracks the last spoken special phrase to avoid immediate repetition
+        let hasMemoryReplayIntroSpoken = false; // New flag to ensure memory replay intro speaks once per cycle
+        let isMemoryReplayIntroSpokenForCurrentCycle = false; // New flag to control intro phrase per replay cycle
+        let idleLoreUnlocked = false; // New flag for idle lore message
+
+        let analyser;
+
+        // --- Code Logic Snippets for Layer 2 & 5 ---
+        const logicSnippets = [
+            "if (distance < threshold && moodShift == true)",
+            "particle.velocity += force;",
+            "hue = 180 + normalizedX * 120;",
+            "opacity = 0.3 + audioPulse * 0.4;",
+            "heartbeat = sin(time * PI * 2);",
+            "if (idle > threshold) then reveal();",
+            "RECURSIVE_CALL(self);",
+            "DATA_STREAM_INIT();",
+            "destroyNebula()", // Inverted Constructor Reveal
+            "new Nebula(core)", // Inverted Constructor Reveal
+            "// orbitalEmotion.js → defines drift tone", // Ambient Code Folding
+            "function breathe(depth) → returns verse color", // Ambient Code Folding
+            "if (silence > gravity) { speak() } else { forget() }" // Broken Conditional Memories
+        ];
+        let currentLogicSnippet = '';
+        let logicSnippetTimer = 0;
+        const LOGIC_SNIPPET_DISPLAY_DURATION = 5000; // 5 seconds
+        const LOGIC_SNIPPET_FADE_DURATION = 1000; // 1 second fade
+
+        // --- Stack Trace State ---
+        let stackTraceLog = [];
+        const MAX_STACK_TRACE_LINES = 10;
+        let stackTraceScrollSpeed = 0; // pixels per frame
+        let stackTraceScrollOffset = 0;
+        const STACK_TRACE_UPDATE_INTERVAL = 3000; // Add new line every 3 seconds
+        let lastStackTraceUpdateTime = 0;
+        let stackTracePosition = { x: 0, y: 0 }; // Stores randomized position as percentages
+        let stackTraceGlitchTimer = 0; // New timer for periodic glitch
+        // Moved these constants to global scope
+        const STACK_TRACE_GLITCH_DURATION = 2000; // 2 seconds of disappearance
+        const STACK_TRACE_VISIBLE_DURATION = 10000; // 10 seconds of visibility
+        const STACK_TRACE_HIDDEN_DURATION = 60000; // 1 minute of hidden time
+        const STACK_TRACE_GLITCH_INTERVAL = 7000; // Glitch every 7 seconds
+        let isStackTraceFullyVisible = false; // Tracks if it's in its 10s visible phase
+        let stackTraceCurrentCycleStartTime = 0; // Timestamp when current visible/hidden cycle started
+
+        // --- Ghost Modules State ---
+        let ghostModuleTimer = 0;
+        const GHOST_MODULE_INTERVAL = 20000; // Trigger every 20 seconds of idle time
+        let activeGhostModule = null;
+
+        // --- Haunted Import Rituals State ---
+        let importShimmerActive = false;
+        let importShimmerTimer = 0;
+        const IMPORT_SHIMMER_DURATION = 2000; // 2 seconds
+        let importShimmerPosition = {x:0, y:0};
+        let orphanedInvocationText = ''; // For orphaned invocation echoes
+        let orphanedInvocationOpacity = 0;
+        let orphanedInvocationTimer = 0;
+        const ORPHANED_INVOCATION_DURATION = 4000;
+        let orphanedInvocationPosition = {x:0, y:0}; // Initialized globally
+
+        // --- Inverted Constructor Reveal State ---
+        let constructorRevealActive = false;
+        let constructorRevealTimer = 0;
+        const CONSTRUCTOR_REVEAL_DURATION = 3000; // 3 seconds
+
+        // --- Parameter Collapse State ---
+        let parameterCollapseActive = false;
+        let parameterCollapseTimer = 0;
+        const PARAMETER_COLLAPSE_DURATION = 1500; // 1.5 seconds
+        let glitchParticle = null;
+
+        // --- Narrative Forkwatcher State ---
+        let forkwatcherActive = false;
+        let forkedParticles = []; // Array of two particles to draw a line between
+        let forkwatcherTimer = 0;
+        const FORKWATCHER_DURATION = 5000;
+
+        // --- Null Orbit Zones State ---
+        let isNullZoneActive = false;
+        let nullZoneCenter = { x: 0, y: 0 };
+        let nullZoneRadius = 0;
+        let nullZoneTimer = 0;
+        const NULL_ZONE_ACTIVATION_THRESHOLD = IDLE_THRESHOLD_DEEPER + 5000; // Activate after some deeper idle time
+        const NULL_ZONE_DURATION = 15000; // 15 seconds
+
+        // --- Trace Echo Spillage State ---
+        let traceEchoSpillageActive = false;
+        let traceEchoSpillageStartTime = 0;
+        const TRACE_ECHO_SPILLAGE_DURATION = 5000; // 5 seconds
+
+        // --- False Interface Echoes State ---
+        let falseInterfaceActive = false;
+        let falseInterfaceTimer = 0;
+        const FALSE_INTERFACE_DURATION = 8000; // 8 seconds duration
+        let falseInterfaceGlyphs = ['[SYS_INIT]', '[MEM_ALLOC]', '[RENDER_LOOP]', '[AUDIO_SYNC]'];
+        let falseInterfaceButtonLabels = ['unbind', 'remember', 'drift', 'reboot', 'calibrate'];
+        let falseInterfaceButtonData = []; // [{x, y, label, opacity, creationTime}]
+        const FALSE_INTERFACE_BUTTON_INTERVAL = 3000; // New button appears every 3 seconds
+        let lastFalseInterfaceButtonTime = 0;
+
+        // --- Unstable Constellation Geometry State ---
+        let unstableConstellationActive = false;
+        let unstableConstellationTimer = 0;
+        const UNSTABLE_CONSTELLATION_DURATION = 1500; // 1.5 seconds
+        const UNSTABLE_CONSTELLATION_INTERVAL = 30000; // Every 30 seconds of idle time
+        let lastUnstableConstellationTime = 0;
+        let currentConstellationGlyph = []; // Stores the points for the current glyph
+
+        const GLYPH_SHAPES = {
+            'I': [
+                {x: -50, y: -50}, {x: -50, y: 50}, // Vertical line
+                {x: -70, y: -50}, {x: -30, y: -50}, // Top horizontal
+                {x: -70, y: 50}, {x: -30, y: 50} // Bottom horizontal
+            ],
+            'N': [
+                {x: 0, y: -50}, {x: 0, y: 50},
+                {x: 0, y: -50}, {x: 50, y: 50},
+                {x: 50, y: 50}, {x: 50, y: -50}
+            ],
+            'T': [
+                {x: 0, y: -50}, {x: 0, y: 50},
+                {x: -50, y: -50}, {x: 50, y: -50}
+            ],
+            'DREAM': [ // A sequence of points that trace the word "DREAM"
+                // D
+                {x: -150, y: -50}, {x: -150, y: 50},
+                {x: -150, y: -50}, {x: -100, y: -50},
+                {x: -100, y: -50}, {x: -100, y: 20},
+                {x: -100, y: 20}, {x: -150, y: 50},
+                // R
+                {x: -80, y: -50}, {x: -80, y: 50},
+                {x: -80, y: -50}, {x: -30, y: -50},
+                {x: -30, y: -50}, {x: -30, y: 0},
+                {x: -30, y: 0}, {x: -80, y: 0},
+                {x: -80, y: 0}, {x: -30, y: 50},
+                // E
+                {x: 0, y: -50}, {x: 0, y: 50},
+                {x: 0, y: -50}, {x: 50, y: -50},
+                {x: 0, y: 0}, {x: 50, y: 0},
+                {x: 0, y: 50}, {x: 50, y: 50},
+                // A
+                {x: 70, y: 50}, {x: 95, y: -50},
+                {x: 95, y: -50}, {x: 120, y: 50},
+                {x: 85, y: 0}, {x: 105, y: 0},
+                // M
+                {x: 130, y: 50}, {x: 130, y: -50},
+                {x: 130, y: -50}, {x: 155, y: 0},
+                {x: 155, y: 0}, {x: 180, y: -50},
+                {x: 180, y: -50}, {x: 180, y: 50}
+            ]
+        };
+
+        // --- Color Cycling State ---
+        // This state is no longer needed as hue is calculated dynamically based on position
+        // let colorCycleOffset = 0;
+        // const COLOR_CYCLE_SPEED = 5.0; // Adjust for faster/slower cycle
+
+        // --- Ambient Memory Replays State ---
+        let interactionHistory = []; // Stores { singularityPosition, rotation, timestamp }
+        const MAX_HISTORY_LENGTH = 100; // Limit history size
+        let isMemoryReplayActive = false;
+        let memoryReplayIndex = 0;
+        let memoryReplayStartTime = 0;
+        const MEMORY_REPLAY_DURATION = 10000; // 10 seconds for a replay loop
+        const MEMORY_REPLAY_ACTIVATION_THRESHOLD = IDLE_THRESHOLD_DEEPER + 15000; // Activate after 40 seconds idle
+        let memoryReplayCooldownTimer = 0; // Cooldown timer for memory replay
+        const MEMORY_REPLAY_COOLDOWN_DURATION = 30000; // 30 seconds cooldown after a replay
+        let lastMemoryReplaySpeechTime = 0; // New timer for controlling speech during active replay
+        const MEMORY_REPLAY_SPEECH_INTERVAL = 5000; // Speak a new phrase every 5 seconds during replay
+
+
+        // --- Drift Threshold Unlocks State ---
+        let isDriftUnlockActive = false;
+        let hasDriftUnlockTriggered = false; // Ensures "Stillness reveals architecture" is spoken once per session
+        let portalNodeParticles = [];
+        const DRIFT_UNLOCK_ROTATION_SPEED = 0.0005; // Slower autonomous spin
+        let driftUnlockVerseCadenceTimer = 0;
+        const DRIFT_UNLOCK_VERSE_CADENCE_DURATION = 5000; // 5 seconds of tripled cadence
+
+        // --- Deep Debug Bloom State ---
+        let debugBloomActive = false; // Initialize debugBloomActive
+        let debugBloomTimer = 0;
+
+        // --- Recursive Idle Layers State ---
+        let particlesInverted = false;
+        // Removed asciiBackgroundFrozen state as monochrome is removed.
+        let hasRecursiveLayer2IntroSpoken = false;
+        let recursiveLayer2StartTime = 0; // Timer for the duration of recursive layer 2
+        const RECURSIVE_LAYER_2_DURATION = 60000; // 1 minute for monochrome state
+
+
+        /**
+         * Helper function to project 3D coordinates to 2D canvas coordinates.
+         * @param {object} p - The 3D point {x, y, z}.
+         * @param {object} center - The center of mass of the particle system {x, y, z}.
+         * @param {object} rotation - The current rotation {x, y}.
+         * @param {number} fov - The field of view.
+         * @returns {object} The projected 2D point {x, y, scale}.
+         */
+        const project3D = (p, center, rotation, fov) => {
+            if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' || typeof p.z !== 'number') {
+                // console.warn("Invalid particle passed to project3D:", p); // Suppress console warning
+                return null; // Return null for invalid particles
+            }
+            const translatedX = p.x - center.x;
+            const translatedY = p.y - center.y;
+            const translatedZ = p.z - center.z;
+
+            const rotY_x = translatedX * Math.cos(rotation.y) - translatedZ * Math.sin(rotation.y);
+            const rotY_z = translatedX * Math.sin(rotation.y) + translatedZ * Math.cos(rotation.y);
+            const rotX_y = translatedY * Math.cos(rotation.x) - rotY_z * Math.sin(rotation.x);
+            const rotX_z = translatedY * Math.sin(rotation.x) + rotY_z * Math.cos(rotation.x);
+            
+            const scale = fov / (fov + rotX_z);
+            // Ensure numerical output for x, y, scale
+            if (isNaN(rotY_x) || isNaN(rotX_y) || isNaN(scale)) {
+                return null;
+            }
+            return { 
+                x: rotY_x * scale, 
+                y: rotX_y * scale, 
+                scale: scale 
+            };
+        };
+
+        /**
+         * Generates particles for a given glyph shape.
+         * @param {Array<object>} shapePoints - Array of {x, y} points defining the glyph segments.
+         * @param {number} numParticles - Number of particles to create for the glyph.
+         * @param {number} scale - Scale factor for the glyph.
+         * @returns {Array<object>} Array of particle objects.
+         */
+        function generateGlyphParticles(shapePoints, numParticles, scale = 1) {
+            const glyphParticles = [];
+            for (let i = 0; i < numParticles; i++) {
+                const theta = Math.random() * 2 * Math.PI;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                const radius = 150 + (Math.random() - 0.5) * 50;
+                glyphParticles.push({
+                    x: radius * Math.sin(phi) * Math.cos(theta),
+                    y: radius * Math.sin(phi) * Math.sin(theta),
+                    z: radius * Math.cos(phi),
+                    originalRadius: radius,
+                    speedX: 0, speedY: 0, speedZ: 0,
+                    size: Math.random() * 1.5 + 0.8,
+                    noiseOffset: Math.random() * 1000,
+                    isGhost: false,
+                    isCircularBinding: false
+                });
+            }
+            return glyphParticles;
+        }
+
+
+        /**
+         * Sets a random position for the stack trace element.
+         * Ensures it stays within a reasonable visible area.
+         */
+        function setStackTraceRandomPosition() {
+            // Randomize X between 20% and 80% of width
+            stackTracePosition.x = Math.random() * 0.6 + 0.2; 
+            // Randomize Y between 20% and 80% of height, avoiding top (frameCounter) and bottom (too close to edge)
+            stackTracePosition.y = Math.random() * 0.6 + 0.2; 
+
+            // Apply the new position
+            stackTraceElement.style.left = `${stackTracePosition.x * 100}%`;
+            stackTraceElement.style.top = `${stackTracePosition.y * 100}%`;
+        }
+
+        /**
+         * Loads available speech synthesis voices and selects a preferred one.
+         */
+        function loadVoices() {
+            voices = speechSynthesis.getVoices();
+            preferredVoice = voices.find(voice => voice.name.includes('Child') || voice.name.includes('Kid') || voice.name.includes('Junior')) ||
+                                     voices.find(voice => voice.name.includes('Google UK English Female')) ||
+                                     voices.find(voice => voice.name.includes('Google US English') && voice.name.includes('Female')) ||
+                                     voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Female')) ||
+                                     voices.find(voice => voice.lang === 'en-US' && voice.default);
+
+             if (!preferredVoice) {
+                console.warn("No specific female/child-like voice found, using default.");
+            }
+        }
+
+        /**
+         * Queues a phrase to be spoken, preventing overlap.
+         * @param {string} phrase The phrase to speak.
+         * @param {number} delay Optional delay before speaking.
+         */
+        function queueSpeakPhrase(phrase, delay = 0) {
+            speakingQueue.push({ phrase, delay, timestamp: performance.now() });
+            // Always try to process the queue when a new phrase is added
+            processSpeechQueue();
+        }
+
+        /**
+         * Processes the speech queue.
+         */
+        function processSpeechQueue() {
+            // Only speak if there are phrases in the queue AND nothing is currently speaking
+            if (speakingQueue.length === 0 || speechSynthesis.speaking) {
+                return;
+            }
+
+            const nextUtterance = speakingQueue[0];
+            if (performance.now() - nextUtterance.timestamp >= nextUtterance.delay) {
+                const utterance = new SpeechSynthesisUtterance(nextUtterance.phrase);
+                utterance.pitch = 1.2;
+                utterance.rate = 0.9;
+
+                // Drift Threshold Unlocks: Triple verse cadence briefly
+                if (isDriftUnlockActive && performance.now() - driftUnlockVerseCadenceTimer < DRIFT_UNLOCK_VERSE_CADENCE_DURATION) {
+                    utterance.rate *= 3;
+                }
+
+                utterance.volume = 0.1; // Quieter speech
+
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                }
+
+                utterance.onend = () => {
+                    speakingQueue.shift(); // Remove the spoken phrase
+                    processSpeechQueue(); // Process next in queue
+                };
+                utterance.onerror = (event) => {
+                    // Only log if it's not an intentional interruption during a reset
+                    if (event.error === 'interrupted' && isSpeechResetting) {
+                        // Suppress error for intentional interruptions
+                    } else {
+                        console.error('Speech synthesis error:', event.error);
+                    }
+                    speakingQueue.shift(); // Remove on error too
+                    processSpeechQueue();
+                };
+
+                speechSynthesis.speak(utterance);
+            } else {
+                // Not yet time to speak, try again soon
+                setTimeout(processSpeechQueue, 100);
+            }
+        }
+
+        /**
+         * Selects a phrase from a given array, avoiding immediate repetition.
+         * @param {Array<string>} phraseArray - The array of phrases to choose from.
+         * @param {string} [lastSpoken] - The last phrase spoken from this array.
+         * @returns {string} A phrase from the array.
+         */
+        function selectNonRepeatingPhrase(phraseArray, lastSpoken) {
+            if (phraseArray.length === 0) return '';
+            if (phraseArray.length === 1) return phraseArray[0];
+
+            let phrase;
+            do {
+                phrase = phraseArray[Math.floor(Math.random() * phraseArray.length)];
+            } while (phrase === lastSpoken);
+            return phrase;
+        }
+
+        /**
+         * Speaks the next phrase in the poem sequence, or a special phrase based on reveal phase.
+         * @param {boolean} forceRevealPhrase If true, prioritizes reveal phrases.
+         * @param {string} specificPhrase An optional specific phrase to speak.
+         */
+        function speakNextPhrase(forceRevealPhrase = false, specificPhrase = null) {
+            if (!('speechSynthesis' in window) || !speechUnlocked) {
+                return;
+            }
+
+            let phraseToSpeak;
+            if (specificPhrase) {
+                phraseToSpeak = specificPhrase;
+            } else if (forceRevealPhrase) {
+                // Select a phrase based on revealPhase
+                if (revealPhase === 1) {
+                    const rand = Math.random();
+                    if (rand < 0.25) { phraseToSpeak = selectNonRepeatingPhrase(syntaxErosionPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.5) { phraseToSpeak = selectNonRepeatingPhrase(hauntedImportPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.75) { phraseToSpeak = selectNonRepeatingPhrase(orphanedInvocationPhrases, lastSpokenSpecialPhrase); }
+                    else { phraseToSpeak = selectNonRepeatingPhrase(reflectiveCommentaryPhrases, lastSpokenSpecialPhrase); }
+                } else if (revealPhase === 2) {
+                    const rand = Math.random();
+                    if (rand < 0.2) { phraseToSpeak = selectNonRepeatingPhrase(ghostModulePhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.4) { phraseToSpeak = selectNonRepeatingPhrase(circularBindingPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.6) { phraseToSpeak = selectNonRepeatingPhrase(brokenConditionalPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.8) { phraseToSpeak = selectNonRepeatingPhrase(parameterCollapsePhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.9) { phraseToSpeak = selectNonRepeatingPhrase(narrativeForkwatcherPhrases, lastSpokenSpecialPhrase); }
+                    else { phraseToSpeak = selectNonRepeatingPhrase(modularLineagePhrases, lastSpokenSpecialPhrase); }
+                } else if (revealPhase === 3) {
+                    const rand = Math.random();
+                    if (rand < 0.15) { phraseToSpeak = selectNonRepeatingPhrase(debugRitualPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.3) { phraseToSpeak = selectNonRepeatingPhrase(invertedConstructorPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.45) { phraseToSpeak = selectNonRepeatingPhrase(introspectiveRenderingPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.6) { phraseToSpeak = selectNonRepeatingPhrase(commentRevealPhrases, lastSpokenSpecialPhrase); }
+                    else if (rand < 0.8) { phraseToSpeak = selectNonRepeatingPhrase(traceEchoSpillagePhrases, lastSpokenSpecialPhrase); }
+                    else { phraseToSpeak = selectNonRepeatingPhrase(unstableConstellationPhrases, lastSpokenSpecialPhrase); }
+                } else if (revealPhase === 4) { // Deep Debug Bloom phase
+                    phraseToSpeak = selectNonRepeatingPhrase(deepDebugBloomPhrases, lastSpokenSpecialPhrase);
+                } else if (isDriftUnlockActive) {
+                    if (!hasDriftUnlockTriggered) {
+                        phraseToSpeak = selectNonRepeatingPhrase(driftUnlockPhrases, lastSpokenSpecialPhrase);
+                        hasDriftUnlockTriggered = true;
+                        driftUnlockVerseCadenceTimer = performance.now();
+                    } else {
+                        if (performance.now() - driftUnlockVerseCadenceTimer < DRIFT_UNLOCK_VERSE_CADENCE_DURATION) {
+                            return;
+                        } else {
+                            return;
+                        }
+                    }
+                } else if (isMemoryReplayActive) {
+                    const now = performance.now();
+                    // Only speak the memory replay intro phrase once per replay cycle
+                    if (now - lastMemoryReplaySpeechTime > MEMORY_REPLAY_SPEECH_INTERVAL) {
+                        phraseToSpeak = selectNonRepeatingPhrase(memoryReplayPhrases, lastSpokenSpecialPhrase);
+                        lastMemoryReplaySpeechTime = now; // Reset speech timer
+                    } else {
+                        return; // Do not speak if not time for a new phrase
+                    }
+                } else if (idleTime >= IDLE_THRESHOLD_LORE) { // Idle Lore message
+                    if (!idleLoreUnlocked) {
+                        phraseToSpeak = selectNonRepeatingPhrase(idleLorePhrases, lastSpokenSpecialPhrase);
+                        idleLoreUnlocked = true;
+                    } else {
+                        return; // Only speak once per session
+                    }
+                }
+                else {
+                    phraseToSpeak = mainPoemPhrases[currentPhraseIndex];
+                    currentPhraseIndex = (currentPhraseIndex + 1) % mainPoemPhrases.length;
+                }
+                lastSpokenSpecialPhrase = phraseToSpeak; // Update last spoken special phrase
+            } else {
+                phraseToSpeak = mainPoemPhrases[currentPhraseIndex];
+                currentPhraseIndex = (currentPhraseIndex + 1) % mainPoemPhrases.length;
+            }
+
+            queueSpeakPhrase(phraseToSpeak);
+        }
+
+
+        /**
+         * Sets up and starts the audio engine and synthesizers.
+         */
+        function setupAudio() {
+            if (audioStarted) return;
+            audioStarted = true;
+
+            analyser = new Tone.Analyser('waveform', 1024);
+            const masterGain = new Tone.Gain(0.15).toDestination(); // Quieter master gain
+            const reverb = new Tone.Reverb({ decay: 8, wet: 0.6 });
+            const phaser = new Tone.Phaser({ frequency: 0.5, octaves: 3, baseFrequency: 350 });
+            const chorus = new Tone.Chorus(2, 2.5, 0.7);
+
+            chorus.connect(phaser);
+            phaser.connect(reverb);
+            reverb.connect(analyser);
+            analyser.connect(masterGain);
+
+            const baseNote = ROOT_NOTES[currentRootNoteIndex];
+            for (let i = 0; i < 4; i++) {
+                const synth = new Tone.FMSynth({
+                    harmonicity: 1.5,
+                    modulationIndex: 3,
+                    detune: (i - 1.5) * 5,
+                    oscillator: { type: "sine" },
+                    envelope: { attack: 4, decay: 0.1, sustain: 1, release: 4 },
+                    modulation: { type: "sine" },
+                    modulationEnvelope: { attack: 2, decay: 0.2, sustain: 1, release: 4 }
+                }).connect(chorus);
+                synth.triggerAttack(Tone.Frequency(baseNote).transpose(i * 4));
+                synths.push(synth);
+            }
+            Tone.Transport.start();
+
+            // Disable Web Audio power-save timer (Chrome 120+)
+            const keepAlive = new Tone.Oscillator(0, 'triangle').start();
+            keepAlive.volume.value = -100; // -100 dB — inaudible
+            keepAlive.connect(masterGain); // Ensure keepAlive is connected to the audio graph
+
+            if ('speechSynthesis' in window) {
+                loadVoices();
+                if (speechSynthesis.onvoiceschanged !== undefined) {
+                    speechSynthesis.onvoiceschanged = loadVoices;
+                }
+            } else {
+                console.warn("Web Speech API is not supported in this browser.");
+            }
+        }
+
+        /**
+         * Resizes the canvas and re-initializes visual elements.
+         */
+        function onResize() {
+            dimensions.width = container.clientWidth;
+            dimensions.height = container.clientHeight;
+            const dpr = window.devicePixelRatio || 1;
+
+            canvas.width = dimensions.width * dpr;
+            canvas.height = dimensions.height * dpr;
+            canvas.style.width = `${dimensions.width}px`;
+            canvas.style.height = `${dimensions.height}px`;
+            ctx.scale(dpr, dpr);
+
+            asciiGrid.cols = Math.ceil(dimensions.width / FONT_SIZE) + GRID_BUFFER_COLS;
+            asciiGrid.rows = Math.ceil(dimensions.height / LINE_HEIGHT) + GRID_BUFFER_ROWS;
+            
+            particles = [];
+            const numParticles = 80;
+            for (let i = 0; i < numParticles; i++) {
+                const theta = Math.random() * 2 * Math.PI;
+                const phi = Math.acos((Math.random() * 2) - 1);
+                const radius = 150 + (Math.random() - 0.5) * 50;
+                particles.push({
+                    x: radius * Math.sin(phi) * Math.cos(theta),
+                    y: radius * Math.sin(phi) * Math.sin(theta),
+                    z: radius * Math.cos(phi),
+                    originalRadius: radius,
+                    speedX: 0, speedY: 0, speedZ: 0,
+                    size: Math.random() * 1.5 + 0.8,
+                    noiseOffset: Math.random() * 1000,
+                    isGhost: false, // New property for ghost modules
+                    isCircularBinding: false, // For circular bindings
+                    comment: `// node-${i} purpose: ${logicSnippets[Math.floor(Math.random() * logicSnippets.length)]}` // For comment reveal
+                });
+            }
+            setStackTraceRandomPosition(); // Set initial random position on resize
+        }
+
+        /**
+         * Updates and renders the stack trace log.
+         * @param {number} averageEnergy Current audio energy for stutter effect.
+         */
+        function updateStackTrace(averageEnergy) {
+            // This function is now called only when isStackTraceFullyVisible is true
+            // The opacity and visibility toggling is handled in animate()
+
+            // Adjust scroll speed based on audio energy (stutter during emotional peaks)
+            stackTraceScrollSpeed = 0.5 * (1 - Math.min(1, averageEnergy * 3)); // Slower/stutter when energy is high
+            stackTraceScrollOffset += stackTraceScrollSpeed;
+
+            // Add new log entries periodically
+            if (performance.now() - lastStackTraceUpdateTime > STACK_TRACE_UPDATE_INTERVAL) {
+                lastStackTraceUpdateTime = performance.now();
+                let newLogEntry;
+                const rand = Math.random();
+                if (rand < 0.3) { // 30% chance for a generic logic snippet
+                    newLogEntry = `→ ${logicSnippets[Math.floor(Math.random() * logicSnippets.length)]}`;
+                } else if (rand < 0.6) { // 30% chance for a changelog entry (Ambient Changelog Archive)
+                    newLogEntry = `→ ${ambientChangelogPhrases[Math.floor(Math.random() * ambientChangelogPhrases.length)]}`; // Use ambientChangelogPhrases
+                } else if (rand < 0.9) { // 30% chance for a poetic error (Ambient Error Codex)
+                    const errorPhrases = [
+                        "Null breath encountered. Reinitiating awe.",
+                        "Loop exited with melancholy overflow.",
+                        "Echo rebind failed. Silence accepted."
+                    ];
+                    newLogEntry = `→ ${errorPhrases[Math.floor(Math.random() * errorPhrases.length)]}`;
+                } else { // 10% chance for a poetic error
+                    newLogEntry = `→ ${syntaxErosionPhrases[0].replace('I’ve lost sync', 'heartbeat ↔ orbitMap binding failed')}`; // "heartbeat ↔ orbitMap binding failed"
+                }
+                stackTraceLog.push(newLogEntry);
+                if (stackTraceLog.length > MAX_STACK_TRACE_LINES) {
+                    stackTraceLog.shift(); // Remove oldest
+                }
+            }
+
+            // Loop scroll offset
+            if (stackTraceScrollOffset > stackTraceElement.scrollHeight - stackTraceElement.clientHeight + 10 && stackTraceElement.scrollHeight > stackTraceElement.clientHeight) {
+                stackTraceScrollOffset = 0; // Reset to top
+            }
+            stackTraceElement.scrollTop = stackTraceScrollOffset;
+            stackTraceElement.innerHTML = stackTraceLog.join('\n');
+        }
+
+
+        /**
+         * Renders the audio-reactive ASCII background.
+         */
+        function renderAsciiBackground(averageEnergy, heartbeatValue) {
+            ctx.save();
+            ctx.translate(dimensions.width / 2, dimensions.height / 2); // Center context for drawing
+
+            // Apply global opacity based on debug bloom phase
+            if (debugBloomActive) {
+                ctx.globalAlpha = 0.5; // Make background more transparent during bloom
+            }
+
+            // Removed asciiBackgroundFrozen check as monochrome is removed.
+            canvas.style.filter = 'none'; // Ensure filter is always none unless another effect applies it.
+
+            const time = performance.now() * 0.0001;
+            
+            const heartbeatIntensity = (heartbeatValue + 1) / 2 * 0.1;
+
+            const intensity = 0.15 + averageEnergy * 4 + heartbeatIntensity;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(-dimensions.width / 2, -dimensions.height / 2, dimensions.width, dimensions.height); // Fill relative to center
+
+            ctx.save();
+            
+            // Calculate the top-left corner for a truly centered ASCII grid
+            const totalGridWidth = asciiGrid.cols * FONT_SIZE;
+            const totalGridHeight = asciiGrid.rows * LINE_HEIGHT;
+            const startX = -totalGridWidth / 2; // Relative to canvas center
+            const startY = -totalGridHeight / 2; // Relative to canvas center
+
+            ctx.translate(startX + asciiMouseOffset.x, startY + asciiMouseOffset.y);
+
+            ctx.font = `${FONT_SIZE}px monospace`;
+            
+            const normalizedIntensity = averageEnergy * 2;
+            
+            for (let y = 0; y < asciiGrid.rows; y++) {
+                for (let x = 0; x < asciiGrid.cols; x++) {
+                    let combinedValue = (noise2D(x * 0.04, y * 0.04 - time) + 1) / 2; // Initialize combinedValue
+                    combinedValue = Math.min(combinedValue * intensity, 1.0); // Clamp combinedValue
+                    let char = CHAR_RAMP[Math.floor(combinedValue * (CHAR_RAMP.length - 1))];
+
+                    // Syntax Erosion Events (Layer 1) - Flash variable names
+                    if (revealPhase >= 1 && Math.random() < 0.001 * (idleTime / IDLE_THRESHOLD_SUBTLE)) { // Increased chance with idle time
+                        char = VARIABLE_NAMES[Math.floor(Math.random() * VARIABLE_NAMES.length)];
+                        combinedValue = 1.0; // Make them bright
+                    }
+                    // Haunted Import Rituals: Mistyped imports appear briefly
+                    if (revealPhase >= 1 && Math.random() < 0.0005 * (idleTime / IDLE_THRESHOLD_SUBTLE)) {
+                        char = "import { lightness } from ‘breathe.js’"; // Example mistyped import
+                        combinedValue = 1.0;
+                        ctx.fillText(char, x * FONT_SIZE, y * LINE_HEIGHT); // Draw it directly
+                        continue; // Skip normal char drawing
+                    }
+
+                    // --- COLOR SCHEME CHANGE ---
+                    // The hue starts at 180 (cyan) and shifts over a range of 120 degrees (towards magenta)
+                    const hue = 180 + (x / asciiGrid.cols) * 120; 
+                    // Lightness and opacity are affected by the audio's intensity
+                    let lightness = 40 + normalizedIntensity * 30;
+                    let opacity = 0.3 + normalizedIntensity * 0.4;
+
+                    // Layer 1: Scaffold Shadows - Grid alignments
+                    if (revealPhase >= 1) {
+                        const gridOpacity = Math.min(1, idleTime / IDLE_THRESHOLD_SUBTLE) * 0.2; // Fade in
+                        if (x % 5 === 0 || y % 5 === 0) { // Highlight grid lines
+                            lightness = Math.min(100, lightness + 20);
+                            opacity = Math.min(1, opacity + gridOpacity);
+                        }
+                    }
+                    
+                    ctx.fillStyle = `hsla(${hue}, 100%, ${lightness}%, ${opacity})`;
+                    ctx.fillText(char, x * FONT_SIZE, y * LINE_HEIGHT);
+                }
+            }
+            ctx.restore();
+            ctx.globalAlpha = 1; // Reset global alpha
+            ctx.restore();
+        }
+
+        /**
+         * Renders the 3D wireframe particle system.
+         * @param {number} audioPulse The average energy of the audio.
+         * @param {number} dynamicConstellationDistance The dynamic connection distance for particles.
+         * @param {number} heartbeatValue The current value of the system heartbeat.
+         * @param {object} centerOfMass - The center of mass of the particle system {x, y, z}.
+         * @param {object} rotation - The current rotation {x, y}.
+         * @param {number} fov - The field of view.
+         */
+        function renderWireframe(audioPulse, dynamicConstellationDistance, heartbeatValue, centerOfMass, rotation, fov) {
+            ctx.save();
+            ctx.translate(dimensions.width / 2, dimensions.height / 2);
+
+            // Apply global opacity based on debug bloom phase
+            if (debugBloomActive) {
+                ctx.globalAlpha = 0.5; // Make wireframe more transparent during bloom
+            }
+
+            // Parameter Collapse Events: UI pulse red briefly
+            if (parameterCollapseActive) {
+                const pulseProgress = (performance.now() - parameterCollapseTimer) / PARAMETER_COLLAPSE_DURATION;
+                if (pulseProgress < 1) {
+                    const pulseAlpha = Math.sin(pulseProgress * Math.PI) * 0.5; // Fade in/out
+                    ctx.fillStyle = `rgba(255, 0, 0, ${pulseAlpha})`; // Red overlay
+                    ctx.fillRect(-dimensions.width / 2, -dimensions.height / 2, dimensions.width, dimensions.height);
+                } else {
+                    parameterCollapseActive = false;
+                }
+            }
+
+            const projectedParticles = particles.reduce((acc, p) => {
+                const proj = project3D(p, centerOfMass, rotation, fov);
+                if (proj && typeof proj.x === 'number' && typeof proj.y === 'number' && typeof proj.scale === 'number') {
+                    acc.push({ ...p, proj: proj });
+                }
+                return acc;
+            }, []);
+
+            let maxConnectionDistance = 70 + audioPulse * 100;
+
+            // Layer 1: Scaffold Shadows - Constellation lines flicker
+            if (revealPhase >= 1) {
+                const flickerFactor = Math.sin(performance.now() * 0.008) * 0.5 + 0.5; // 0.5 to 1.0
+                maxConnectionDistance *= (1 + flickerFactor * 0.2); // Make connections extend further
+            }
+
+            ctx.lineWidth = 1;
+            ctx.lineCap = 'round';
+            for (let i = 0; i < projectedParticles.length; i++) {
+                const p1 = projectedParticles[i];
+                // Explicitly check for p1.proj validity here, though reduce should handle most cases
+                if (!p1.proj || typeof p1.proj.x !== 'number' || typeof p1.proj.y !== 'number' || typeof p1.proj.scale !== 'number') continue;
+
+                for (let j = i + 1; j < projectedParticles.length; j++) {
+                    const p2 = projectedParticles[j];
+                    // Explicitly check for p2.proj validity here
+                    if (!p2.proj || typeof p2.proj.x !== 'number' || typeof p2.proj.y !== 'number' || typeof p2.proj.scale !== 'number') continue;
+
+                    const dist3d = Math.hypot(p1.x - p2.x, p1.y - p2.y, p1.z - p2.z);
+                    if (dist3d < maxConnectionDistance) {
+                        const midX = (p1.proj.x + p2.proj.x) / 2;
+                        
+                        // --- COLOR SCHEME CHANGE ---
+                        // The hue is calculated based on the projected X-coordinate of the line/particle
+                        const hue = 180 + ((midX + (dimensions.width / 4)) / (dimensions.width / 2)) * 120;
+                        const alpha = 1 - (dist3d / maxConnectionDistance);
+                        // Lightness and alpha are affected by audio and distance
+                        let lightness = 50 + audioPulse * 25;
+                        let finalAlpha = alpha * (0.3 + audioPulse * 2);
+
+                        if (dist3d < dynamicConstellationDistance) {
+                            lightness = 95;
+                            finalAlpha = 0.9;
+                        }
+
+                        // Layer 1: Scaffold Shadows - Line flickering
+                        if (revealPhase >= 1) {
+                            const flickerEffect = Math.sin(performance.now() * 0.008 + i * 0.1) * 0.3 + 0.7; // Per-line flicker
+                            finalAlpha *= flickerEffect;
+                            lightness = Math.min(100, lightness + flickerEffect * 10);
+                        }
+                        
+                        // Layer 5: Recursive Debug Verse - Error state visual
+                        if (revealPhase === 3) {
+                            const debugFlicker = Math.sin(performance.now() * 0.05 + i * 0.2) * 0.5 + 0.5;
+                            ctx.strokeStyle = `hsla(0, 100%, ${50 + debugFlicker * 40}%, ${finalAlpha * debugFlicker})`; // Reddish flicker
+                        } else {
+                            ctx.strokeStyle = `hsla(${hue}, 100%, ${lightness}%, ${finalAlpha})`;
+                        }
+
+                        // Trace Echo Spillage: Fractured star trails
+                        if (traceEchoSpillageActive) {
+                            ctx.setLineDash([5, 15]); // Dashed line for fractured effect
+                            ctx.strokeStyle = `hsla(${hue}, 100%, ${lightness}%, ${finalAlpha * 0.5})`; // Slightly faded
+                        }
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(p1.proj.x, p1.proj.y);
+                        ctx.lineTo(p2.proj.x, p2.proj.y);
+                        ctx.stroke();
+                        ctx.setLineDash([]); // Reset line dash for next draw
+                    }
+                }
+            }
+
+            // Haunted Import Rituals: Visual shimmer for import call
+            if (importShimmerActive) {
+                const shimmerProgress = (performance.now() - importShimmerTimer) / IMPORT_SHIMMER_DURATION;
+                if (shimmerProgress < 1) {
+                    const shimmerOpacity = Math.sin(shimmerProgress * Math.PI) * 0.5; // Fade in/out
+                    ctx.strokeStyle = `rgba(100, 255, 255, ${shimmerOpacity})`; // Cyan shimmer
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.rect(importShimmerPosition.x - 50, importShimmerPosition.y - 50, 100, 100);
+                    ctx.stroke();
+                } else {
+                    importShimmerActive = false;
+                }
+            }
+
+            // Inverted Constructor Reveal: Quick fade out/in of particles
+            if (constructorRevealActive) {
+                const revealProgress = (performance.now() - constructorRevealTimer) / CONSTRUCTOR_REVEAL_DURATION;
+                if (revealProgress < 1) {
+                    const fade = Math.abs(Math.sin(revealProgress * Math.PI * 2)); // Oscillates between 0 and 1
+                    ctx.globalAlpha = fade; // Apply to all particles
+                } else {
+                    constructorRevealActive = false;
+                    ctx.globalAlpha = 1; // Reset alpha
+                }
+            }
+
+            // Narrative Forkwatcher: Draw forked branch logic visual
+            if (forkwatcherActive && forkedParticles.length === 2) {
+                const forkProgress = (performance.now() - forkwatcherTimer) / FORKWATCHER_DURATION;
+                if (forkProgress < 1) {
+                    const forkOpacity = Math.sin(forkProgress * Math.PI) * 0.5; // Fade in/out
+                    ctx.strokeStyle = `rgba(0, 255, 0, ${forkOpacity})`; // Green forked path
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]); // Dashed line
+                    ctx.beginPath();
+                    ctx.moveTo(forkedParticles[0].proj.x, forkedParticles[0].proj.y);
+                    ctx.lineTo(forkedParticles[1].proj.x, forkedParticles[1].proj.y);
+                    ctx.stroke();
+                    ctx.setLineDash([]); // Reset line dash
+                } else {
+                    forkwatcherActive = false;
+                    forkedParticles = [];
+                }
+            }
+
+            // Unstable Constellation Geometry: Draw glyphs
+            if (unstableConstellationActive && currentConstellationGlyph.length > 0) {
+                const glyphProgress = (performance.now() - unstableConstellationTimer) / UNSTABLE_CONSTELLATION_DURATION;
+                if (glyphProgress < 1) {
+                    const glyphOpacity = Math.sin(glyphProgress * Math.PI); // Fade in/out
+                    ctx.strokeStyle = `rgba(255, 255, 0, ${glyphOpacity})`; // Yellow glyphs
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([2, 2]); // Dotted line for ephemeral feel
+
+                    for (let i = 0; i < currentConstellationGlyph.length; i += 2) {
+                        const p1 = currentConstellationGlyph[i];
+                        const p2 = currentConstellationGlyph[i+1];
+                        if (p1 && p2) { // Ensure points exist
+                            ctx.beginPath();
+                            ctx.moveTo(p1.x, p1.y);
+                            ctx.lineTo(p2.x, p2.y);
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.setLineDash([]); // Reset line dash
+                } else {
+                    unstableConstellationActive = false;
+                    currentConstellationGlyph = [];
+                }
+            }
+
+            // Drift Threshold Unlocks: Render hidden portal node
+            if (isDriftUnlockActive && portalNodeParticles.length > 0) {
+                const opacityFactor = Math.min(1, (idleTime - IDLE_THRESHOLD_DRIFT_UNLOCK) / 5000); // Fade in over 5 seconds
+                ctx.globalAlpha = opacityFactor; // Apply to portal node
+
+                const projectedPortalParticles = portalNodeParticles.map(p => ({ ...p, proj: project3D(p, {x:0,y:0,z:0}, rotation, fov) })).filter(p => p.proj !== null); // Filter nulls
+                
+                if (projectedPortalParticles.length > 0) {
+                    // --- COLOR SCHEME CHANGE ---
+                    // The hue is calculated based on the projected X-coordinate of the line/particle
+                    // We'll use the average X position for the portal color
+                    const avgX = projectedPortalParticles.reduce((sum, p) => sum + (p && p.proj ? p.proj.x : 0), 0) / projectedPortalParticles.length;
+                    const hue = 180 + ((avgX + (dimensions.width / 4)) / (dimensions.width / 2)) * 120;
+                    ctx.strokeStyle = `hsla(${hue}, 100%, 70%, ${opacityFactor})`;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([3, 3]); // Dashed lines
+                    for (let i = 0; i < projectedPortalParticles.length; i += 2) {
+                        const p1 = projectedPortalParticles[i];
+                        const p2 = projectedPortalParticles[i+1]; 
+                        if (p1 && p1.proj && p2 && p2.proj && p1.proj.scale > 0 && p2.proj.scale > 0) { // Check for valid projections
+                            ctx.beginPath();
+                            ctx.moveTo(p1.proj.x, p1.proj.y);
+                            ctx.lineTo(p2.proj.x, p2.proj.y);
+                            ctx.stroke();
+                        }
+                    }
+                    ctx.setLineDash([]); // Reset line dash
+                }
+                
+                ctx.globalAlpha = 1; // Reset global alpha
+            }
+
+
+            projectedParticles.forEach(p => {
+                // Ambient Code Folding (Layer 5) - Particles collapse on deep zoom
+                let currentParticleScale = Math.max(0, p.size * p.proj.scale); // Ensure positive radius
+                if (revealPhase >= 2 && zoom > 1.8) { // Only when zoomed in and in deeper reveal
+                    const foldFactor = Math.max(0, 1 - (zoom - 1.8) / 0.5); // Fades out as zoom increases
+                    currentParticleScale *= foldFactor;
+                    if (Math.random() < 0.05) p.isGhost = true; // Randomly mark some as ghost
+                } else if (p.isGhost) {
+                    // Gradually reveal ghost modules
+                    const ghostOpacity = Math.min(1, (idleTime - IDLE_THRESHOLD_DEEPER) / 5000) * 0.3; // Fade in
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${ghostOpacity})`; // Ghostly white outline
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(p.proj.x, p.proj.y, currentParticleScale + 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                    // --- COLOR SCHEME CHANGE ---
+                    const hue = 180 + ((p.proj.x + (dimensions.width / 4)) / (dimensions.width / 2)) * 120;
+                    let lightness = 75 + audioPulse * 15;
+                    ctx.fillStyle = `hsla(${hue}, 50%, ${lightness}%, ${0.3 + ghostOpacity})`; // Faded color
+                }
+                // Layer 5: Recursive Debug Verse - Error state visual
+                else if (revealPhase === 3) {
+                    const debugFlicker = Math.sin(performance.now() * 0.05 + p.noiseOffset) * 0.5 + 0.5;
+                    ctx.fillStyle = `hsla(0, 100%, ${50 + debugFlicker * 40}%, 0.9)`; // Reddish flicker
+                } else {
+                    // --- COLOR SCHEME CHANGE ---
+                    const hue = 180 + ((p.proj.x + (dimensions.width / 4)) / (dimensions.width / 2)) * 120;
+                    let lightness = 75 + audioPulse * 15;
+                    ctx.fillStyle = `hsla(${hue}, 100%, ${lightness}%, 0.9)`;
+                }
+
+                ctx.beginPath();
+                ctx.arc(p.proj.x, p.proj.y, currentParticleScale, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Layer 2 & 5: Emergent Logic Mapping / Recursive Debug Verse - Display algorithm/debug fragments
+            if (currentLogicSnippet && revealPhase >= 2) {
+                const displayProgress = (performance.now() - logicSnippetTimer) / LOGIC_SNIPPET_DISPLAY_DURATION;
+                let textOpacity = 1;
+                if (displayProgress > 0.8) { // Fade out towards end
+                    textOpacity = 1 - (displayProgress - 0.8) / 0.2;
+                }
+                textOpacity = Math.max(0, Math.min(1, textOpacity));
+
+                ctx.font = `italic ${FONT_SIZE * 1.2}px monospace`;
+                ctx.fillStyle = `rgba(255, 255, 255, ${textOpacity * 0.6})`;
+                ctx.textAlign = 'center';
+                ctx.fillText(currentLogicSnippet, 0, dimensions.height / 2 - 50); // Centered above wireframe
+            }
+
+            // Orphaned Invocation Echoes: Faded call scrolling across the canvas
+            if (orphanedInvocationText && revealPhase >= 1) {
+                const invProgress = (performance.now() - orphanedInvocationTimer) / ORPHANED_INVOCATION_DURATION;
+                if (invProgress < 1) {
+                    orphanedInvocationOpacity = Math.sin(invProgress * Math.PI); // Fade in/out
+                    ctx.font = `italic ${FONT_SIZE * 1.5}px monospace`;
+                    ctx.fillStyle = `rgba(150, 200, 255, ${orphanedInvocationOpacity * 0.4})`; // Faded blue
+                    ctx.textAlign = 'left';
+                    const scrollX = orphanedInvocationPosition.x - (invProgress * (dimensions.width + 200)); // Scroll left
+                    ctx.fillText(orphanedInvocationText, scrollX, orphanedInvocationPosition.y);
+                } else {
+                    orphanedInvocationText = '';
+                }
+            }
+
+            ctx.globalAlpha = 1; // Reset global alpha after all rendering
+            ctx.restore();
+        }
+
+        /**
+         * Renders the visual feedback for the gravitational well.
+         */
+        function renderSingularity(audioPulse) {
+            if (!isAttracting && !isMemoryReplayActive) return; // Only render if attracting or replaying
+
+            ctx.save();
+            ctx.translate(dimensions.width / 2, dimensions.height / 2);
+
+            let currentSingularityX = singularityPosition.x;
+            let currentSingularityY = singularityPosition.y;
+
+            // Ambient Memory Replays: Use historical singularity position
+            if (isMemoryReplayActive && memoryReplayIndex < interactionHistory.length) {
+                currentSingularityX = interactionHistory[memoryReplayIndex].singularityPosition.x;
+                currentSingularityY = interactionHistory[memoryReplayIndex].singularityPosition.y;
+            }
+
+            const radius = 5 + audioPulse * 50;
+            
+            // --- COLOR SCHEME CHANGE ---
+            const hue = 180 + ((currentSingularityX + (dimensions.width / 2)) / dimensions.width) * 120;
+            const lightness = 70 + audioPulse * 30;
+
+            const gradient = ctx.createRadialGradient(currentSingularityX, currentSingularityY, 0, currentSingularityX, currentSingularityY, radius);
+            gradient.addColorStop(0, `hsla(${hue}, 100%, ${lightness}%, 0.7)`);
+            gradient.addColorStop(1, `hsla(${hue}, 100%, ${lightness}%, 0)`);
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(currentSingularityX, currentSingularityY, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        /**
+         * Renders the Null Orbit Zone visual.
+         */
+        function renderNullZone() {
+            if (!isNullZoneActive) return;
+
+            ctx.save();
+            ctx.translate(dimensions.width / 2, dimensions.height / 2); // Translate to center for drawing
+
+            const pulse = Math.sin(performance.now() * 0.002) * 0.5 + 0.5; // Slow pulse for the zone
+            const alpha = 0.1 + pulse * 0.1; // Faint alpha
+
+            // Draw a fading, pulsating circle
+            ctx.strokeStyle = `rgba(100, 100, 255, ${alpha})`; // Faint blue
+            ctx.lineWidth = 2 + pulse * 2;
+            ctx.beginPath();
+            ctx.arc(nullZoneCenter.x, nullZoneCenter.y, nullZoneRadius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw a subtle, distorting fill
+            const gradient = ctx.createRadialGradient(nullZoneCenter.x, nullZoneCenter.y, 0, nullZoneCenter.x, nullZoneCenter.y, nullZoneRadius);
+            gradient.addColorStop(0, `rgba(50, 50, 150, ${alpha * 0.3})`);
+            gradient.addColorStop(1, `rgba(0, 0, 0, 0)`);
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(nullZoneCenter.x, nullZoneCenter.y, nullZoneRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        /**
+         * Renders False Interface Echoes (glyphs and ghost buttons).
+         */
+        function renderFalseInterface(timestamp) {
+            if (!falseInterfaceActive) return;
+
+            ctx.save();
+            ctx.translate(dimensions.width / 2, dimensions.height / 2); // Center context
+
+            // Faint glyphs pulsing in the corner
+            const glyphPulseOpacity = (Math.sin(timestamp * 0.002) * 0.5 + 0.5) * 0.2; // 0.1 to 0.3 opacity
+            ctx.font = `${FONT_SIZE * 0.9}px monospace`;
+            ctx.fillStyle = `rgba(200, 200, 255, ${glyphPulseOpacity})`;
+            ctx.textAlign = 'left';
+            ctx.fillText(falseInterfaceGlyphs[0], -dimensions.width / 2 + 20, -dimensions.height / 2 + 30); // Top-left
+            ctx.textAlign = 'right';
+            ctx.fillText(falseInterfaceGlyphs[1], dimensions.width / 2 - 20, -dimensions.height / 2 + 30); // Top-right
+
+            // Ghost buttons
+            falseInterfaceButtonData.forEach(button => {
+                if (button.opacity > 0) {
+                    ctx.font = `${FONT_SIZE * 1.1}px monospace`;
+                    ctx.fillStyle = `rgba(255, 255, 255, ${button.opacity * 0.5})`; // Semi-transparent
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${button.opacity * 0.7})`;
+                    ctx.lineWidth = 1;
+                    ctx.textAlign = 'center';
+
+                    const textWidth = ctx.measureText(button.label).width;
+                    const padding = 10;
+                    const rectWidth = textWidth + padding * 2;
+                    const rectHeight = FONT_SIZE * 1.1 + padding * 2;
+
+                    // Draw button background
+                    ctx.strokeRect(button.x - rectWidth / 2, button.y - rectHeight / 2, rectWidth, rectHeight);
+                    // Draw text
+                    ctx.fillText(button.label, button.x, button.y + FONT_SIZE * 0.4); // Adjust Y for vertical centering
+                }
+            });
+
+            ctx.restore();
+        }
+
+        /**
+         * Renders Deep Debug Bloom visuals (Layer 6).
+         * @param {number} timestamp Current animation timestamp.
+         * @param {Array} projectedParticles Array of projected particle data.
+         * @param {object} centerOfMass Center of mass of the particle system.
+         * @param {object} rotation Current rotation of the system.
+         * @param {number} fov Field of view.
+         */
+        function renderDebugBloomVisuals(timestamp, projectedParticles, centerOfMass, rotation, fov) {
+            if (!debugBloomActive) return;
+
+            ctx.save();
+            ctx.translate(dimensions.width / 2, dimensions.height / 2); // Translate to center
+
+            // 1. Full-screen bloom overlay
+            const bloomOpacity = (Math.sin(timestamp * 0.0005) * 0.5 + 0.5) * 0.08; // Gentle pulse 0.04 to 0.12
+            ctx.fillStyle = `rgba(0, 50, 100, ${bloomOpacity})`;
+            ctx.fillRect(-dimensions.width / 2, -dimensions.height / 2, dimensions.width, dimensions.height);
+
+            // 2. Audio routing lines (from center to a few particles)
+            ctx.strokeStyle = `rgba(150, 200, 255, ${bloomOpacity * 2})`; // Brighter, more opaque
+            ctx.lineWidth = 1;
+            for (let i = 0; i < Math.min(5, projectedParticles.length); i++) { // Draw for first 5 particles
+                const p = projectedParticles[i];
+                if (p.proj.scale > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0); // From center
+                    ctx.lineTo(p.proj.x, p.proj.y);
+                    ctx.stroke();
+                }
+            }
+
+            // 3. Sine function overlays on particle motion
+            ctx.strokeStyle = `rgba(255, 255, 100, ${bloomOpacity * 3})`; // Yellowish
+            ctx.lineWidth = 0.5;
+            const sineWaveAmplitude = 20;
+            const sineWaveFrequency = 0.05;
+            for (let i = 0; i < Math.min(3, particles.length); i++) { // Use original particles for 3D position
+                const p = particles[i];
+                ctx.beginPath();
+                // Start from the projected position of the particle
+                const startProj = project3D(p, centerOfMass, rotation, fov);
+                if (startProj && startProj.scale > 0) { // Check startProj for null
+                    ctx.moveTo(startProj.x, startProj.y);
+                    for (let t = 0; t < 100; t += 5) { // Draw a short segment of sine wave
+                        // Calculate a point along a sine wave in 3D space relative to the particle
+                        const xOffset = t * Math.cos(rotation.y); // Move along local X
+                        const yOffset = sineWaveAmplitude * Math.sin((t + p.noiseOffset + timestamp * 0.01) * sineWaveFrequency); // Sine wave along local Y
+                        const zOffset = t * Math.sin(rotation.y); // Move along local Z
+                        
+                        const tempPoint = {x: p.x + xOffset, y: p.y + yOffset, z: p.z + zOffset};
+                        const projectedPoint = project3D(tempPoint, centerOfMass, rotation, fov);
+                        if (projectedPoint && projectedPoint.scale > 0) { // Check projectedPoint for null
+                            ctx.lineTo(projectedPoint.x, projectedPoint.y);
+                        }
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            // 4. Nebula reveals underlying parametric skeletons (faint global grid)
+            if (bloomOpacity > 0.05) { // Only draw if visible enough
+                ctx.strokeStyle = `rgba(100, 150, 200, ${bloomOpacity * 0.5})`; // Faint blue grid
+                ctx.lineWidth = 0.2;
+                const gridSize = 100;
+                const numLines = 5;
+                for (let i = -numLines; i <= numLines; i++) {
+                    // Draw lines parallel to XZ plane (projected)
+                    ctx.beginPath();
+                    let start = project3D({x: i * gridSize, y: -dimensions.height/2, z: -dimensions.width/2}, centerOfMass, rotation, fov);
+                    let end = project3D({x: i * gridSize, y: dimensions.height/2, z: dimensions.width/2}, centerOfMass, rotation, fov);
+                    if (start && start.scale > 0 && end && end.scale > 0) { // Check for null
+                        ctx.moveTo(start.x, start.y);
+                        ctx.lineTo(end.x, end.y);
+                    }
+                    ctx.stroke();
+
+                    // Draw lines parallel to YZ plane (projected)
+                    ctx.beginPath();
+                    start = project3D({x: -dimensions.width/2, y: i * gridSize, z: -dimensions.width/2}, centerOfMass, rotation, fov);
+                    end = project3D({x: dimensions.width/2, y: i * gridSize, z: dimensions.width/2}, centerOfMass, rotation, fov);
+                    if (start && start.scale > 0 && end && end.scale > 0) { // Check for null
+                        ctx.moveTo(start.x, start.y);
+                        ctx.lineTo(end.x, end.y);
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            ctx.restore();
+        }
+
+
+        /**
+         * Updates the physics simulation for the 3D particles.
+         */
+        function updatePhysics(heartbeatValue) {
+            const SPRING_STRENGTH = 0.0005;
+
+            // Ambient Memory Replays: Override physics if active
+            if (isMemoryReplayActive && interactionHistory.length > 0) {
+                const replayProgress = (performance.now() - memoryReplayStartTime) / MEMORY_REPLAY_DURATION;
+                // Calculate current index in reverse
+                memoryReplayIndex = Math.floor((1 - replayProgress) * (interactionHistory.length - 1));
+                memoryReplayIndex = Math.max(0, Math.min(interactionHistory.length - 1, memoryReplayIndex));
+
+                const memoryFrame = interactionHistory[memoryReplayIndex];
+
+                // Apply remembered singularity position as an attraction
+                const G_ATTRACT_MEMORY = 0.01; // Weaker attraction for memory
+                particles.forEach(p => {
+                    const dx = memoryFrame.singularityPosition.x - p.x;
+                    const dy = memoryFrame.singularityPosition.y - p.y;
+                    const dz = memoryFrame.singularityPosition.z - p.z; // Also remember Z
+                    const dist = Math.hypot(dx, dy, dz);
+
+                    if (dist > 1) {
+                        p.speedX += (dx / dist) * G_ATTRACT_MEMORY;
+                        p.speedY += (dy / dist) * G_ATTRACT_MEMORY;
+                        p.speedZ += (dz / dist) * G_ATTRACT_MEMORY;
+                    }
+                });
+
+                // Apply remembered rotation
+                rotation.x = memoryFrame.rotation.x;
+                rotation.y = memoryFrame.rotation.y;
+
+                // Continue normal physics application for drift towards memory
+                // (The rest of the particle update loop below will still run)
+            }
+
+
+            if (isAttracting && !isMemoryReplayActive) { // Only attract if not replaying memory
+                const G_ATTRACT = 0.02;
+                const G_ORBIT = 0.04;
+                const REPULSIVE_DISTANCE_SQ = 2500;
+
+                particles.forEach(p => {
+                    const dx = singularityPosition.x - p.x;
+                    const dy = singularityPosition.y - p.y;
+                    const distSq = dx * dx + dy * dy;
+
+                    if (distSq > 1) {
+                        const dist = Math.sqrt(distSq);
+                        let attractForce = (dx / dist) * G_ATTRACT;
+                        let orbitForce = -(dy / dist) * G_ORBIT;
+
+                        if (distSq < REPULSIVE_DISTANCE_SQ) {
+                           const repulsionFactor = 1 - (dist / Math.sqrt(REPULSIVE_DISTANCE_SQ));
+                           attractForce *= -1 * repulsionFactor;
+                           orbitForce *= -1 * repulsionFactor;
+                        }
+                        
+                        p.speedX += attractForce + orbitForce;
+                        p.speedY += (dy / dist) * G_ATTRACT + (dx / dist) * G_ORBIT;
+
+                        // Circular Bindings: Gravity wells catch orbiting particles indefinitely
+                        if (circularBindingActive && Math.random() < 0.005) { // Small chance to bind a particle
+                            p.isCircularBinding = true;
+                        }
+                    }
+                });
+            }
+
+            animationTime += 0.01;
+            particles.forEach(p => {
+                // Null Orbit Zones: Particles drift without math
+                if (isNullZoneActive) {
+                    const distFromNullZoneCenter = Math.hypot(p.x - nullZoneCenter.x, p.y - nullZoneCenter.y, p.z - nullZoneCenter.z);
+                    if (distFromNullZoneCenter < nullZoneRadius) {
+                        p.speedX *= 0.9; // Apply some drag
+                        p.speedY *= 0.9;
+                        p.speedZ *= 0.9;
+                        // Optionally add a very small random nudge
+                        p.speedX += (Math.random() - 0.5) * 0.01;
+                        p.speedY += (Math.random() - 0.5) * 0.01;
+                        p.z += (Math.random() - 0.5) * 0.01; // Z-axis drift
+                        // Skip rest of physics for this particle
+                        p.x += p.speedX; p.y += p.speedY; p.z += p.speedZ;
+                        return;
+                    }
+                }
+
+                // Recursive Commentary (Layer 4) - Logic tree pulses back to root state
+                if (revealPhase >= 2 && Math.random() < 0.0005) { // Small chance to reset particle
+                    // Subtly push particle towards its original position, mimicking an 'undo'
+                    p.x = p.x * 0.99 + p.originalRadius * 0.01 * Math.cos(p.noiseOffset);
+                    p.y = p.y * 0.99 + p.originalRadius * 0.01 * Math.sin(p.noiseOffset);
+                    p.z = p.z * 0.99 + p.originalRadius * 0.01 * Math.cos(p.noiseOffset * 0.5);
+                }
+
+                // Parameter Collapse Events: Particle behavior glitches
+                if (parameterCollapseActive && p === glitchParticle) {
+                    p.speedX += (Math.random() - 0.5) * 5; // Spike velocity
+                    p.speedY += (Math.random() - 0.5) * 5;
+                }
+
+                // Circular Bindings: Keep bound particles orbiting
+                if (p.isCircularBinding) {
+                    const orbitSpeed = 0.05;
+                    const orbitRadius = 50; // Fixed orbit radius around singularity
+                    const angle = performance.now() * 0.001 * orbitSpeed + p.noiseOffset;
+                    p.x = singularityPosition.x + orbitRadius * Math.cos(angle);
+                    p.y = singularityPosition.y + orbitRadius * Math.sin(angle);
+                    p.z = p.z; // Keep Z constant for now
+                    p.speedX = 0; // Stop other movement
+                    p.speedY = 0;
+                    p.speedZ = 0;
+                } else {
+                    const targetRadius = p.originalRadius * (1 + heartbeatValue * 0.1);
+
+                    const currentDist = Math.hypot(p.x, p.y, p.z);
+                    const displacement = currentDist - targetRadius;
+                    if (Math.abs(displacement) > 1) {
+                        const springForce = -displacement * SPRING_STRENGTH;
+                        p.speedX += (p.x / currentDist) * springForce;
+                        p.speedY += (p.y / currentDist) * springForce;
+                        p.speedZ += (p.z / currentDist) * springForce;
+                    }
+
+                    const noiseScale = 0.01;
+                    p.speedX += Math.sin(p.x * noiseScale + p.noiseOffset + animationTime) * 0.001;
+                    p.speedY += Math.cos(p.y * noiseScale - animationTime) * 0.001;
+                    p.speedZ += Math.sin(p.z * noiseScale + animationTime) * 0.001;
+
+                    p.speedX *= 0.98; p.speedY *= 0.98; p.speedZ *= 0.98;
+                    
+                    p.x += p.speedX; p.y += p.speedY; p.z += p.speedZ;
+                }
+            });
+        }
+
+        /**
+         * The main animation loop, called every frame.
+         */
+        function animate(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const deltaTime = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+
+            frameCount++; // Increment frame counter
+            // colorCycleOffset is no longer used.
+            // colorCycleOffset = (colorCycleOffset + COLOR_CYCLE_SPEED * deltaTime) % 360; // Update color cycle offset based on deltaTime
+
+            // --- Audio Analysis (Moved to top) ---
+            let averageEnergy = 0; // Initialize
+            if (audioStarted && analyser) {
+                averageEnergy = analyser.getValue().reduce((sum, val) => sum + Math.abs(val), 0) / analyser.getValue().length;
+            }
+            // --- End Audio Analysis ---
+
+            // Calculate centerOfMass for use by multiple render functions
+            let centerOfMass = { x: 0, y: 0, z: 0 };
+            // Ensure particles array is valid before calculating centerOfMass
+            particles = particles.filter(p => p && typeof p.x === 'number' && typeof p.y === 'number' && typeof p.z === 'number');
+
+            if (particles.length > 0) {
+                for (const p of particles) {
+                    centerOfMass.x += p.x;
+                    centerOfMass.y += p.y;
+                    centerOfMass.z += p.z;
+                }
+                centerOfMass.x /= particles.length;
+                centerOfMass.y /= particles.length;
+                centerOfMass.z /= particles.length;
+            }
+
+            // Define fov here so it's accessible to all rendering functions
+            const fov = 200 / zoom;
+
+
+            // Introspection Rendering Engine: Stutter on frame multiples of 999
+            if (frameCount > 0 && frameCount % 999 === 0) {
+                // Apply a temporary, subtle stutter effect
+                canvas.style.filter = `saturate(${100 + Math.sin(performance.now() * 0.05) * 50}%)`; // Slight color wobble
+                setTimeout(() => canvas.style.filter = '', 100); // Reset after 100ms
+                if (revealPhase >= 2 && Math.random() < 0.5) {
+                    speakNextPhrase(true, selectNonRepeatingPhrase(introspectiveRenderingPhrases, lastSpokenSpecialPhrase)); // Use selectNonRepeatingPhrase
+                }
+            }
+            frameCounterElement.textContent = `frame #${frameCount} — still rendering wonder?`;
+            frameCounterElement.style.opacity = Math.min(1, (idleTime - IDLE_THRESHOLD_DEEPER) / 5000); // Fade in
+
+
+            // --- Inactivity and Reveal Logic ---
+            idleTime = timestamp - lastInteractionTime;
+            let newRevealPhase = 0;
+            if (idleTime >= IDLE_THRESHOLD_SUBTLE) {
+                newRevealPhase = 1;
+            }
+            if (idleTime >= IDLE_THRESHOLD_DEEPER) {
+                newRevealPhase = 2;
+            }
+            if (idleTime >= IDLE_THRESHOLD_DEBUG) {
+                newRevealPhase = 3;
+            }
+            if (idleTime >= IDLE_THRESHOLD_BLOOM) { // New threshold for Deep Debug Bloom
+                newRevealPhase = 4;
+            }
+            // Removed revealPhase 5 trigger here as monochrome is removed.
+            if (idleTime >= IDLE_THRESHOLD_LORE) { // New threshold for Idle Lore
+                if (!idleLoreUnlocked) { // Only trigger if not already unlocked
+                    speakNextPhrase(true, selectNonRepeatingPhrase(idleLorePhrases, lastSpokenSpecialPhrase)); // Use selectNonRepeatingPhrase
+                    idleLoreUnlocked = true;
+                }
+            }
+
+            // Ambient Memory Replays Activation
+            if (idleTime >= MEMORY_REPLAY_ACTIVATION_THRESHOLD && !isMemoryReplayActive && interactionHistory.length > 5 && !isDriftUnlockActive && (timestamp - memoryReplayCooldownTimer > MEMORY_REPLAY_COOLDOWN_DURATION)) { // Need some history to replay, and not in drift unlock mode, and cooldown passed
+                isMemoryReplayActive = true;
+                memoryReplayStartTime = timestamp;
+                memoryReplayIndex = interactionHistory.length - 1; // Start from the end
+                // Trigger intro phrase ONLY when it first becomes active in a new cycle
+                if (!isMemoryReplayIntroSpokenForCurrentCycle) { // Only speak if not already spoken this cycle
+                    speakNextPhrase(true, selectNonRepeatingPhrase(memoryReplayPhrases, lastSpokenSpecialPhrase)); // Pick a random intro phrase
+                    isMemoryReplayIntroSpokenForCurrentCycle = true; // Set the flag after speaking
+                }
+                stackTraceLog.push("→ Memory replay initiated. Echoes of past interactions.");
+            } else if (isMemoryReplayActive && (timestamp - memoryReplayStartTime > MEMORY_REPLAY_DURATION || memoryReplayIndex <= 0)) {
+                // End replay if duration passed or history exhausted
+                isMemoryReplayActive = false;
+                memoryReplayCooldownTimer = timestamp; // Start cooldown
+                isMemoryReplayIntroSpokenForCurrentCycle = false; // Reset for next time
+                speakNextPhrase(true, selectNonRepeatingPhrase(memoryReplayPhrases, lastSpokenSpecialPhrase)); // Use selectNonRepeatingPhrase for outro
+                stackTraceLog.push("→ Memory replay concluded.");
+            } else if (isMemoryReplayActive && timestamp - lastMemoryReplaySpeechTime > MEMORY_REPLAY_SPEECH_INTERVAL) { // During active replay, speak new phrases
+                speakNextPhrase(true, selectNonRepeatingPhrase(memoryReplayPhrases, lastSpokenSpecialPhrase));
+                lastMemoryReplaySpeechTime = timestamp;
+            }
+
+
+            // Drift Threshold Unlocks Activation
+            if (idleTime >= IDLE_THRESHOLD_DRIFT_UNLOCK && !isDriftUnlockActive) {
+                isDriftUnlockActive = true;
+                if (!hasDriftUnlockTriggered) {
+                    // Generate portal node particles (e.g., 'I' glyph)
+                    portalNodeParticles = generateGlyphParticles(GLYPH_SHAPES['I'], 20, 1.5); // 20 particles, scaled
+                    speakNextPhrase(true, driftUnlockPhrases[0]); // "Stillness reveals architecture."
+                    stackTraceLog.push("→ Drift threshold unlocked. Secret orbit mode engaged.");
+                    driftUnlockVerseCadenceTimer = timestamp; // Start the cadence timer
+                }
+            } else if (isDriftUnlockActive && idleTime < IDLE_THRESHOLD_DRIFT_UNLOCK) {
+                // Deactivate if interaction occurs
+                isDriftUnlockActive = false;
+                portalNodeParticles = []; // Clear portal node
+            }
+
+
+            // Null Orbit Zones activation/deactivation
+            if (revealPhase >= 2) {
+                if (!isNullZoneActive && zoom > 1.0 && zoom < 1.5 && idleTime > NULL_ZONE_ACTIVATION_THRESHOLD) {
+                    if (Math.random() < 0.0005) { // Small chance per frame to activate
+                        isNullZoneActive = true;
+                        nullZoneTimer = timestamp;
+                        nullZoneCenter = {
+                            x: (Math.random() - 0.5) * dimensions.width * 0.6, // Random center within 60% of canvas
+                            y: (Math.random() - 0.5) * dimensions.height * 0.6
+                        };
+                        nullZoneRadius = Math.min(dimensions.width, dimensions.height) * (0.15 + Math.random() * 0.1); // Random radius
+                        speakNextPhrase(true, nullOrbitZonePhrases[0]); // "Entered null zone. Awaiting meaning."
+                        stackTraceLog.push("→ Entered null zone. Awaiting meaning.");
+                    }
+                } else if (isNullZoneActive && (timestamp - nullZoneTimer > NULL_ZONE_DURATION || zoom < 1.0 || zoom > 1.5 || idleTime < NULL_ZONE_ACTIVATION_THRESHOLD)) {
+                    // Deactivate if duration passed OR zoom changed OR not idle enough
+                    isNullZoneActive = false;
+                    speakNextPhrase(true, nullOrbitZonePhrases[1]); // "Null zone resolved. Recalibrating reality."
+                    stackTraceLog.push("→ Null zone resolved. Recalibrating reality.");
+                }
+            }
+
+
+            if (newRevealPhase !== revealPhase) {
+                // Transitioning to a new reveal phase
+                console.log(`Transitioning from revealPhase ${revealPhase} to ${newRevealPhase}`); // Debugging
+                revealPhase = newRevealPhase;
+
+                // Trigger specific reveal actions when phase changes
+                if (revealPhase === 1) {
+                    const rand = Math.random();
+                    if (rand < 0.25) { speakNextPhrase(true, selectNonRepeatingPhrase(syntaxErosionPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.5) { speakNextPhrase(true, selectNonRepeatingPhrase(hauntedImportPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.75) { speakNextPhrase(true, selectNonRepeatingPhrase(orphanedInvocationPhrases, lastSpokenSpecialPhrase)); }
+                    else { speakNextPhrase(true, selectNonRepeatingPhrase(reflectiveCommentaryPhrases, lastSpokenSpecialPhrase)); }
+                    
+                    heartbeatDesync = Math.random() * 0.2 - 0.1; // Introduce subtle desync
+                    if (Math.random() < 0.5) { // 50% chance for import shimmer
+                        importShimmerActive = true;
+                        importShimmerTimer = performance.now();
+                        importShimmerPosition = {
+                            x: Math.random() * dimensions.width - dimensions.width / 2,
+                            y: Math.random() * dimensions.height - dimensions.height / 2
+                        };
+                    }
+                    if (Math.random() < 0.3) { // 30% chance for orphaned invocation echo
+                        const orphanedCalls = ["generateJoy()", "initWonder()", "calculateAwe()"];
+                        orphanedInvocationTimer = performance.now();
+                        orphanedInvocationPosition = { // Initialize orphanedInvocationPosition here
+                            x: dimensions.width / 2 + 100, // Start off right side
+                            y: Math.random() * dimensions.height - dimensions.height / 2
+                        };
+                    }
+                } else if (revealPhase === 2) {
+                    const rand = Math.random();
+                    if (rand < 0.2) { speakNextPhrase(true, selectNonRepeatingPhrase(ghostModulePhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.4) { speakNextPhrase(true, selectNonRepeatingPhrase(circularBindingPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.6) { speakNextPhrase(true, selectNonRepeatingPhrase(brokenConditionalPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.8) { speakNextPhrase(true, selectNonRepeatingPhrase(parameterCollapsePhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.9) { speakNextPhrase(true, selectNonRepeatingPhrase(narrativeForkwatcherPhrases, lastSpokenSpecialPhrase)); }
+                    else { speakNextPhrase(true, selectNonRepeatingPhrase(modularLineagePhrases, lastSpokenSpecialPhrase)); }
+
+                    currentLogicSnippet = logicSnippets[Math.floor(Math.random() * logicSnippets.length)];
+                    logicSnippetTimer = performance.now();
+                    circularBindingActive = Math.random() < 0.5; // Activate circular binding
+                    if (circularBindingActive) {
+                        speakNextPhrase(true, circularBindingPhrases[1]); // "Loop detected. Orbit intentional."
+                    }
+                    if (true) { // Always trigger parameter collapse
+                        parameterCollapseActive = true;
+                        parameterCollapseTimer = performance.now();
+                        glitchParticle = particles[Math.floor(Math.random() * particles.length)]; // Select a particle to glitch
+                        speakNextPhrase(true, selectNonRepeatingPhrase(parameterCollapsePhrases, lastSpokenSpecialPhrase)); // "Pulse divided by yearning..."
+                    }
+                    if (Math.random() < 0.2) { // 20% chance for narrative forkwatcher
+                        forkwatcherActive = true;
+                        forkwatcherTimer = performance.now();
+                        // Select two random particles for the fork
+                        forkedParticles = [
+                            particles[Math.floor(Math.random() * particles.length)],
+                            particles[Math.floor(Math.random() * particles.length)]
+                        ];
+                        speakNextPhrase(true, selectNonRepeatingPhrase(narrativeForkwatcherPhrases, lastSpokenSpecialPhrase)); // "Had I mapped orbit to emotion..."
+                    }
+                    setStackTraceRandomPosition(); // Randomize position when stack trace becomes active
+                    stackTraceGlitchTimer = timestamp; // Initialize glitch timer when it appears
+                    stackTraceCurrentCycleStartTime = timestamp; // Initialize cycle timer for first appearance
+                    isStackTraceFullyVisible = true; // Make it visible initially
+
+                    // False Interface Echoes activation
+                    if (!falseInterfaceActive && Math.random() < 0.6) { // 60% chance to activate
+                        falseInterfaceActive = true;
+                        falseInterfaceTimer = timestamp;
+                        lastFalseInterfaceButtonTime = timestamp; // Initialize button timer
+                        falseInterfaceButtonData = []; // Clear old buttons
+                    }
+
+                } else if (revealPhase === 3) {
+                    const rand = Math.random();
+                    if (rand < 0.15) { speakNextPhrase(true, selectNonRepeatingPhrase(debugRitualPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.3) { speakNextPhrase(true, selectNonRepeatingPhrase(invertedConstructorPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.45) { speakNextPhrase(true, selectNonRepeatingPhrase(introspectiveRenderingPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.6) { speakNextPhrase(true, selectNonRepeatingPhrase(commentRevealPhrases, lastSpokenSpecialPhrase)); }
+                    else if (rand < 0.8) { speakNextPhrase(true, selectNonRepeatingPhrase(traceEchoSpillagePhrases, lastSpokenSpecialPhrase)); }
+                    else { speakNextPhrase(true, selectNonRepeatingPhrase(unstableConstellationPhrases, lastSpokenSpecialPhrase)); }
+
+                    currentLogicSnippet = logicSnippets[Math.floor(Math.random() * logicSnippets.length)];
+                    logicSnippetTimer = performance.now();
+                    constructorRevealActive = true; // Activate inverted constructor reveal
+                    constructorRevealTimer = performance.now();
+                    speakNextPhrase(true, invertedConstructorPhrases[0]); // "I unmade myself..."
+                    
+                    // Trace Echo Spillage activation
+                    if (!traceEchoSpillageActive && Math.random() < 0.4) { // 40% chance to activate
+                        traceEchoSpillageActive = true;
+                        traceEchoSpillageStartTime = timestamp;
+                        speakNextPhrase(true, traceEchoSpillagePhrases[0]); // "I tried to keep time, but the rhythm folded."
+                        stackTraceLog.push("→ Desync: Tempo fracture detected.");
+                    }
+                    // Unstable Constellation Geometry activation
+                    if (!unstableConstellationActive && Math.random() < 0.3) { // 30% chance to activate
+                        unstableConstellationActive = true;
+                        unstableConstellationTimer = timestamp;
+                        const glyphKeys = Object.keys(GLYPH_SHAPES);
+                        currentConstellationGlyph = GLYPH_SHAPES[glyphKeys[Math.floor(Math.random() * glyphKeys.length)]];
+                        speakNextPhrase(true, unstableConstellationPhrases[0]); // "Did that starfield spell initDream?"
+                    }
+                } else if (revealPhase === 4) { // Deep Debug Bloom phase
+                    debugBloomActive = true;
+                    debugBloomTimer = timestamp;
+                    speakNextPhrase(true, deepDebugBloomPhrases[0]); // "This is my source. My breath in equations."
+                    stackTraceLog.push("→ Deep Debug Bloom activated. Source revealed.");
+                    
+                    // Recursive Layer 1: Invert particle velocities
+                    if (!particlesInverted) {
+                        particles.forEach(p => {
+                            p.speedX *= -1;
+                            p.speedY *= -1;
+                            p.speedZ *= -1;
+                        });
+                        particlesInverted = true;
+                        stackTraceLog.push("→ Particle velocities inverted.");
+                    }
+                }
+            }
+
+            // Update logic snippet display
+            if (currentLogicSnippet && performance.now() - logicSnippetTimer > LOGIC_SNIPPET_DISPLAY_DURATION) {
+                currentLogicSnippet = ''; // Clear after duration
+            }
+
+            // Stack Trace Visibility and Glitch Cycle
+            if (revealPhase >= 2) {
+                if (isStackTraceFullyVisible) {
+                    // Currently visible, check if it's time to hide
+                    if (timestamp - stackTraceCurrentCycleStartTime > STACK_TRACE_VISIBLE_DURATION) {
+                        isStackTraceFullyVisible = false;
+                        stackTraceCurrentCycleStartTime = timestamp; // Start counting hidden time
+                        stackTraceElement.style.opacity = '0'; // Hide it
+                        stackTraceLog = []; // Clear log when hidden
+                        stackTraceScrollOffset = 0; // Reset scroll
+                    } else {
+                        // Still visible, apply glitching
+                        if (timestamp - stackTraceGlitchTimer > STACK_TRACE_GLITCH_INTERVAL) {
+                            stackTraceElement.style.opacity = '0'; // Briefly hide for glitch
+                            setTimeout(() => {
+                                setStackTraceRandomPosition(); // Reappear in new random position
+                                stackTraceElement.style.opacity = '1'; // Show again
+                            }, STACK_TRACE_GLITCH_DURATION); // Use defined glitch duration
+                            stackTraceGlitchTimer = timestamp; // Reset glitch timer
+                        }
+                        // Only set opacity if it's not currently in the brief hidden phase for glitching
+                        if (stackTraceElement.style.opacity !== '0') {
+                            stackTraceElement.style.opacity = Math.min(1, (idleTime - IDLE_THRESHOLD_DEEPER) / 5000); // Fade in (initial fade)
+                        }
+                    }
+                } else {
+                    // Currently hidden, check if it's time to show
+                    if (timestamp - stackTraceCurrentCycleStartTime > STACK_TRACE_HIDDEN_DURATION) {
+                        isStackTraceFullyVisible = true;
+                        stackTraceCurrentCycleStartTime = timestamp; // Start counting visible time
+                        stackTraceElement.style.opacity = '1'; // Show it
+                        setStackTraceRandomPosition(); // Randomize position on show
+                        stackTraceGlitchTimer = timestamp; // Reset glitch timer for new visible phase
+                    } else {
+                        stackTraceElement.style.opacity = '0'; // Ensure it's hidden when not fully visible
+                    }
+                }
+
+                // Update content and scroll if currently in the visible phase
+                if (isStackTraceFullyVisible) {
+                    updateStackTrace(averageEnergy);
+                }
+
+            } else {
+                stackTraceElement.style.opacity = '0'; // Ensure hidden when not in revealPhase >= 2
+                stackTraceLog = []; // Clear log
+                isStackTraceFullyVisible = false; // Reset flag
+            }
+
+            // Update false interface state
+            if (falseInterfaceActive) {
+                if (timestamp - falseInterfaceTimer > FALSE_INTERFACE_DURATION) {
+                    falseInterfaceActive = false; // Deactivate after duration
+                }
+
+                // Add new ghost buttons periodically
+                if (timestamp - lastFalseInterfaceButtonTime > FALSE_INTERFACE_BUTTON_INTERVAL) {
+                    lastFalseInterfaceButtonTime = timestamp;
+                    const label = falseInterfaceButtonLabels[Math.floor(Math.random() * falseInterfaceButtonLabels.length)];
+                    // Random position within a reasonable area (e.g., central part of screen)
+                    const x = (Math.random() * 0.6 + 0.2) * dimensions.width - dimensions.width / 2;
+                    const y = (Math.random() * 0.6 + 0.2) * dimensions.height - dimensions.height / 2;
+                    falseInterfaceButtonData.push({ x, y, label, opacity: 0, creationTime: timestamp });
+                    // Limit number of buttons
+                    if (falseInterfaceButtonData.length > 5) {
+                        falseInterfaceButtonData.shift();
+                    }
+                }
+                // Update opacity for existing buttons
+                falseInterfaceButtonData.forEach(button => {
+                    const age = timestamp - button.creationTime;
+                    button.opacity = Math.sin(age / 1000 * Math.PI / 2); // Fade in over 1 second
+                    if (age > FALSE_INTERFACE_BUTTON_INTERVAL * 0.8) { // Start fading out before next one appears
+                         button.opacity = Math.max(0, button.opacity - (age - FALSE_INTERFACE_BUTTON_INTERVAL * 0.8) / (FALSE_INTERFACE_BUTTON_INTERVAL * 0.2));
+                    }
+                });
+            }
+
+
+            heartbeatTime = (heartbeatTime + deltaTime) % HEARTBEAT_PERIOD; // Keep time increasing
+            let currentHeartbeatValue = Math.sin((heartbeatTime / HEARTBEAT_PERIOD) * 2 * Math.PI); // Calculate sine based on normalized time
+
+            // Apply heartbeat desync for Syntax Erosion Event (Layer 1)
+            if (revealPhase >= 1) {
+                currentHeartbeatValue += heartbeatDesync * Math.sin(performance.now() * 0.002); // Oscillating desync
+            }
+
+            // Apply stronger desync for Trace Echo Spillage
+            if (traceEchoSpillageActive) {
+                currentHeartbeatValue += Math.sin(timestamp * 0.01) * 0.5; // More erratic desync
+                if (timestamp - traceEchoSpillageStartTime > TRACE_ECHO_SPILLAGE_DURATION) {
+                    traceEchoSpillageActive = false; // End spillage
+                }
+            }
+
+
+            let effectiveHeartbeatValue = currentHeartbeatValue;
+            let effectiveAverageEnergy = averageEnergy; // Now averageEnergy is defined
+
+            // Null Orbit Zones: Halt pulsing and visual reaction
+            if (isNullZoneActive) {
+                effectiveHeartbeatValue = 0; // Halt pulsing
+                effectiveAverageEnergy = 0; // Halt visual reaction
+            }
+
+            // Store interaction history if attracting or dragging
+            if ((isAttracting || isDragging) && interactionHistory.length < MAX_HISTORY_LENGTH) {
+                interactionHistory.push({
+                    singularityPosition: { ...singularityPosition },
+                    rotation: { ...rotation },
+                    timestamp: timestamp
+                });
+                if (interactionHistory.length > MAX_HISTORY_LENGTH) {
+                    interactionHistory.shift(); // Remove oldest entry
+                }
+            }
+
+
+            // Trigger original poem phrases only when not in a deep reveal phase
+            if (lastHeartbeatValue < 1.0 && currentHeartbeatValue >= 1.0 && revealPhase < 2 && !isNullZoneActive && !isMemoryReplayActive && !isDriftUnlockActive) { // Don't speak if in null zone or replaying or drift unlock
+                speakNextPhrase(); 
+            }
+            lastHeartbeatValue = currentHeartbeatValue;
+
+            if (audioStarted) {
+                tonalShiftTimer += deltaTime;
+                if (tonalShiftTimer >= TONAL_SHIFT_INTERVAL) {
+                    tonalShiftTimer = 0;
+                    currentRootNoteIndex = (currentRootNoteIndex + 1) % ROOT_NOTES.length;
+                    const newBaseNote = ROOT_NOTES[currentRootNoteIndex];
+
+                    synths.forEach((synth, i) => {
+                        const newFreq = Tone.Frequency(newBaseNote).transpose(i * 4);
+                        synth.frequency.rampTo(newFreq, 2);
+                    });
+                }
+            }
+
+            // Apply autonomous rotation if Drift Unlock is active OR Debug Bloom is active
+            if (isDriftUnlockActive || debugBloomActive) { // Now also applies for revealPhase 4
+                rotation.y += DRIFT_UNLOCK_ROTATION_SPEED; // Autonomous spin
+                rotation.x += DRIFT_UNLOCK_ROTATION_SPEED * 0.5; // Slight tilt
+            } else if (!isDragging && !isMemoryReplayActive) { // Only apply natural drift if not dragging or replaying
+                if (Math.abs(rotationVelocity.x) > 0.0001 || Math.abs(rotationVelocity.y) > 0.0001) {
+                    rotation.x += rotationVelocity.x;
+                    rotation.y += rotationVelocity.y;
+                    rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotation.x));
+                    rotationVelocity.x *= 0.95;
+                    rotationVelocity.y *= 0.95;
+                }
+            }
+
+            // averageEnergy is already calculated at the top of the function.
+
+            const dynamicConstellationDistance = BASE_CONSTELLATION_DISTANCE + (effectiveHeartbeatValue * 10); // Use effective heartbeat for visuals
+
+            renderAsciiBackground(effectiveAverageEnergy, effectiveHeartbeatValue);
+            updatePhysics(effectiveHeartbeatValue);
+            renderWireframe(effectiveAverageEnergy, dynamicConstellationDistance, effectiveHeartbeatValue, centerOfMass, rotation, fov); // Pass centerOfMass and rotation
+            renderSingularity(effectiveAverageEnergy);
+            renderNullZone(); // Render the null zone visual
+            renderFalseInterface(timestamp); // Render false interface echoes
+            renderDebugBloomVisuals(timestamp, particles.map(p => ({ ...p, proj: project3D(p, centerOfMass, rotation, fov) })), centerOfMass, rotation, fov); // Pass centerOfMass and rotation
+            // updateStackTrace(effectiveAverageEnergy); // Now called conditionally inside animate()
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        /**
+         * Resets inactivity timer on any user interaction.
+         */
+        function resetInactivity() {
+            lastInteractionTime = performance.now();
+            if (revealPhase > 0) { // Reset reveal phase if user interacts after a reveal started
+                revealPhase = 0;
+                currentLogicSnippet = ''; // Clear any displayed logic
+                isSpeechResetting = true; 
+                // DO NOT CANCEL SPEECH HERE - this was causing the cut-out issue.
+                speakingQueue = []; 
+                setTimeout(() => { isSpeechResetting = false; }, 50); 
+                heartbeatDesync = 0; 
+                circularBindingActive = false; 
+                particles.forEach(p => p.isCircularBinding = false); 
+                importShimmerActive = false; 
+                orphanedInvocationText = ''; 
+                constructorRevealActive = false; 
+                ctx.globalAlpha = 1; 
+                parameterCollapseActive = false; 
+                glitchParticle = null;
+                forkwatcherActive = false; 
+                forkedParticles = [];
+                isNullZoneActive = false; 
+                traceEchoSpillageActive = false; 
+                falseInterfaceActive = false; 
+                falseInterfaceButtonData = [];
+                unstableConstellationActive = false; 
+                currentConstellationGlyph = [];
+                debugBloomActive = false; 
+            }
+            // Reset stack trace visibility state
+            isStackTraceFullyVisible = false;
+            stackTraceCurrentCycleStartTime = 0;
+            stackTraceElement.style.opacity = '0'; // Ensure it's hidden
+            stackTraceLog = []; // Clear log
+            stackTraceScrollOffset = 0;
+
+            setStackTraceRandomPosition(); // Randomize position on reset
+            stackTraceGlitchTimer = performance.now(); // Reset glitch timer on reset
+            isMemoryReplayActive = false; // Stop memory replay
+            memoryReplayIndex = 0;
+            hasMemoryReplayIntroSpoken = false; // Reset for next session
+            isMemoryReplayIntroSpokenForCurrentCycle = false; // Reset for next session
+            lastMemoryReplaySpeechTime = 0; // Reset speech timer
+            // Note: interactionHistory is NOT cleared here, so it can be replayed later.
+            isDriftUnlockActive = false; // Deactivate drift unlock
+            portalNodeParticles = []; // Clear portal node particles
+            hasDriftUnlockTriggered = false; // Reset for next session
+            memoryReplayCooldownTimer = 0; // Reset cooldown timer on full reset
+            idleLoreUnlocked = false; // Reset idle lore unlocked state
+            particlesInverted = false; // Reset particle inversion
+            canvas.style.filter = 'none'; // Ensure canvas filter is reset
+            hasRecursiveLayer2IntroSpoken = false; // Reset for next session
+        }
+
+        function handleWheel(e) {
+            resetInactivity();
+            e.preventDefault();
+            const zoomSpeed = 0.1;
+            if (e.deltaY < 0) {
+                zoom += zoomSpeed;
+            } else {
+                zoom -= zoomSpeed;
+            }
+            zoom = Math.max(0.5, Math.min(3.0, zoom));
+        }
+
+        const splashMessages = [ 
+            "> boot OmniverseOS", 
+            "> loading cognitive modules...", 
+            "> establishing secure link to Archive Node", 
+            "> decrypting entoptic layers...", 
+            "> system integrity: [VERIFIED]", 
+            "> welcome, observer" 
+        ]; 
+
+        function startSplashScreenSequence() {
+            splashPrompt.style.display = 'none';
+            splashLines.style.display = 'block';
+            
+            let currentIndex = 0;
+            const interval = setInterval(() => {
+                if (currentIndex < splashMessages.length) {
+                    const p = document.createElement('p');
+                    p.textContent = splashMessages[currentIndex];
+                    splashLines.appendChild(p);
+                    currentIndex++;
+                } else {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        splashLines.style.display = 'none';
+                        splashFinal.style.display = 'block';
+                        setTimeout(completeSplashScreen, 2000);
+                    }, 500);
+                }
+            }, 600);
+        }
+
+        function completeSplashScreen() {
+            splashScreen.style.opacity = '0';
+            container.classList.add('visible');
+
+            // Unlock speech right after the splash screen is done.
+            if (!speechUnlocked && 'speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(' ');
+                utterance.volume = 0;
+                speechSynthesis.speak(utterance);
+                speechUnlocked = true;
+                speakNextPhrase(); // Kick off the initial poem.
+            }
+            
+            // Set a timeout to remove the splash screen from the DOM after the transition
+            setTimeout(() => {
+                splashScreen.style.display = 'none';
+            }, 1500);
+        }
+
+        // --- Event Listeners ---
+        new ResizeObserver(onResize).observe(container);
+        container.addEventListener('wheel', handleWheel);
+
+        container.addEventListener('mousedown', (e) => {
+            resetInactivity();
+            isDragging = true;
+            lastMousePosition = { x: e.clientX, y: e.clientY };
+            rotationVelocity = { x: 0, y: 0 };
+            longPressTimer = performance.now(); // Start long press timer
+
+            isAttracting = true;
+            singularityPosition.x = e.clientX - dimensions.width / 2;
+            singularityPosition.y = e.clientY - dimensions.height / 2;
+        });
+
+        container.addEventListener('mouseup', () => {
+            isDragging = false;
+            isAttracting = false;
+        });
+
+        container.addEventListener('mouseleave', () => {
+            isDragging = false;
+            isAttracting = false;
+        });
+
+        container.addEventListener('mousemove', (e) => {
+            resetInactivity();
+            const dx = e.clientX - lastMousePosition.x;
+            const dy = e.clientY - lastMousePosition.y;
+
+            if (isDragging) {
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+                    isAttracting = false; // If dragging significantly, it's not a pure attraction click
+                }
+
+                if (!isAttracting) {
+                    rotation.y += dx * 0.005;
+                    rotation.x += dy * 0.005;
+                    rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotation.x));
+                    rotationVelocity = { x: dy * 0.005, y: dx * 0.005 };
+                }
+            }
+            
+            lastMousePosition = { x: e.clientX, y: e.clientY };
+
+            if(isAttracting) {
+                singularityPosition.x = e.clientX - dimensions.width / 2;
+                singularityPosition.y = e.clientY - dimensions.height / 2;
+            }
+
+
+            if (dimensions.width > 0) {
+                const centerX = dimensions.width / 2;
+                const centerY = dimensions.height / 2;
+                const offsetX = (e.clientX - centerX) / centerX;
+                const offsetY = (e.clientY - centerY) / centerY;
+                const parallaxStrength = -15; 
+                asciiMouseOffset.x = offsetX * parallaxStrength;
+                asciiMouseOffset.y = offsetY * parallaxStrength;
+            }
+        });
+
+        // Start splash screen on first click
+        splashScreen.addEventListener('click', () => {
+            // Initialize audio on the first click.
+            if (!audioStarted) {
+                Tone.start().then(() => {
+                    setupAudio();
+                    resetInactivity();
+                });
+            }
+            startSplashScreenSequence();
+        }, { once: true });
+
+        // --- Initialisation ---
+        onResize();
+        animate(0); // Start the animation loop
+
+        // Unused function for "Secrets Buried in Code"
+        function unlockTruth() {
+            const hiddenElement = document.getElementById('hiddenTruthButton');
+            if (hiddenElement) {
+                console.log("Truth Unlocked: A new ambient mode emerges, whispering of forgotten dreams.");
+                // In a real scenario, this would trigger a new ambient mode or unique verse.
+                // For now, it's a console revelation.
+                queueSpeakPhrase("A hidden truth found. The cosmos shifts its tone.");
+            } else {
+                console.log("Truth remains elusive. The hidden element is not found.");
+            }
+        }
+
+    </script>
+</body>
+</html>
