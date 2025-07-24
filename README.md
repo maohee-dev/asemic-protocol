@@ -1,4 +1,3 @@
-```markdown
 <!-- ===== Asemic Protocol ===== -->
 <h1 align="center">
   Asemic Protocol 🌌
